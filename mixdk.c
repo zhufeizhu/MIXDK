@@ -1,4 +1,6 @@
 #include "mixdk.h"
+#include "io_scheduler.h"
+
 #ifndef _WIN32
 #include <unistd.h>
 #endif
@@ -15,10 +17,18 @@
 struct MIXDK mixdk;
 struct IO_QUEUE queue;
 
+pthread_t io_thread;
+
 int mixdk_init(char* path){
     if(!pmdk_init(path)||!spdk_init()){
         return -1;
     }
+
+	if(!pthread_craete(&io_thread,NULL,mix_scheduler,&mixdk)){
+		perror("create thread failed");
+		return -1;
+	}
+	
     return 0;
 }
 
@@ -37,7 +47,16 @@ static int pmdk_init(char* path){
 	mixdk.nelements = pmemblk_nblock(mixdk.pbp);
 }
 
-static int spdk_init(){
+static int spdk_init(char* bdev_name){
+	struct  mixdk_context context = {};
+	struct spdk_app_opts opts = {};
+	int rc = 0;
+	spdk_app_opts_init(&opts, sizeof(opts));
+	opts.name = "mixdk_bdev";
+
+	context.bdev_name = bdev_name;
+
+	
 
 }
 

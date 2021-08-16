@@ -1,30 +1,29 @@
 #ifndef MIXDK_H_
 #define MIXDK_H_
+#include "mix_queue.h"
 #include <libpmemblk.h>
 #include <pthread.h>
 
-struct MIX_DK{
+struct mixdk{
     PMEMblkpool *pbp;
+    mixdk_context_t* context;
+    io_queue_t* queue;
     size_t nelements;
-};
+}mixdk_t;
 
-struct IO_TASK{
-    char* buf;
-    size_t len;
-    size_t block;
-    size_t offset;
-    /*flag[0]:请求类型 0为读 1为写*/
-    /*flag[1]:请求介质:0为pm 1为ssd*/
-    u_int8_t flag; 
-};
-
-struct IO_QUEUE{
-    size_t head;
-    size_t tail;
-    size_t len;
-    struct IO_TASK* tasks;
+struct io_queue{
+    mix_queue* queue;
     pthread_mutex_t* queue_lock;
-}
+}io_queue_t;
+
+struct mixdk_context {
+	struct spdk_bdev *bdev;
+	struct spdk_bdev_desc *bdev_desc;
+	struct spdk_io_channel *bdev_io_channel;
+	char *buff;
+	char *bdev_name;
+	struct spdk_bdev_io_wait_entry bdev_io_wait;
+}mixdk_context_t;
 
 int mixdk_init();
 
