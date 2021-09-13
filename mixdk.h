@@ -4,12 +4,7 @@
 #include <libpmemblk.h>
 #include <pthread.h>
 
-struct mixdk{
-    PMEMblkpool *pbp;
-    mixdk_context_t* context;
-    io_queue_t* queue;
-    size_t nelements;
-}mixdk_t;
+
 
 struct io_queue{
     mix_queue* queue;
@@ -22,8 +17,14 @@ struct mixdk_context {
 	struct spdk_io_channel *bdev_io_channel;
 	char *buff;
 	char *bdev_name;
-	struct spdk_bdev_io_wait_entry bdev_io_wait;
 }mixdk_context_t;
+
+struct mixdk{
+    PMEMblkpool *pbp;
+    mixdk_context_t* context;
+    mix_ring* queue;
+    size_t nelements;
+}mixdk_t;
 
 int mixdk_init();
 

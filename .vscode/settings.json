@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "mixdk.h": "c"
+        "mixdk.h": "c",
+        "*.e": "c"
     }
 }

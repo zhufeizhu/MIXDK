@@ -2,7 +2,17 @@
 #include <string.h>
 #include <assert.h>
 
-int mix_queue_init(mix_queue_t* queue,void* buffer,unsigned int size, unsigned int esize){
+static unsigned int min(unsigned int a, unsigned int b)
+{
+	return (a > b) ? b : a;
+}
+
+static inline unsigned int __mix_queue_unused(mix_queue_t *queue)
+{
+        return (queue->mask + 1) - (queue->in - queue->out);
+}
+
+static inline int __mix_queue_init(mix_queue_t* queue,void* buffer,unsigned int size, unsigned int esize){
     size = size / esize;
     queue->in = 0;
     queue->out = 0;
@@ -16,7 +26,7 @@ int mix_queue_init(mix_queue_t* queue,void* buffer,unsigned int size, unsigned i
     return 0;
 }
 
-unsigned int mix_enqueue(mix_queue_t* queue, const void* src,unsigned int len,unsigned int off){
+static inline unsigned int __mix_enqueue(mix_queue_t* queue, const void* src,unsigned int len,unsigned int off){
     unsigned int size = queue->mask + 1;
 	unsigned int esize = queue->esize;
 	unsigned int l;
@@ -37,7 +47,7 @@ unsigned int mix_enqueue(mix_queue_t* queue, const void* src,unsigned int len,un
 	smp_wmb();
 }
 
-void mix_dequeue(mix_queue_t* queue,void* dst, unsigned int len,unsigned int off){
+static inline void __mix_dequeue(mix_queue_t* queue,void* dst, unsigned int len,unsigned int off){
     unsigned int size = queue->mask + 1;
 	unsigned int esize = queue->esize;
 	unsigned int l;
@@ -59,6 +69,53 @@ void mix_dequeue(mix_queue_t* queue,void* dst, unsigned int len,unsigned int off
 	smp_wmb();
 }
 
+mix_queue_t* mix_queue_init(unsigned int size, unsigned int esize){
+	assert(size > 0 && esize > 0);
+	
+	mix_queue_t* queue = malloc(sizeof(mix_queue_t));
+	assert(queue != NULL);
+	void* buffer = malloc(size);
+	assert(buffer != NULL);
+	if(__mix_queue_init(queue,buffer,size,esize) == EINVAL){
+		return NULL;
+	}
+
+	return queue;
+}
+
+/**
+ * 
+**/
+unsigned int mix_enqueue(mix_queue_t* queue, const void* src, unsigned int len){
+	assert(queue != NULL);
+	unsigned int l;
+
+    l = __mix_queue_unused(queue);
+    if (len > l)
+          len = l;
+
+    __mix_enqueue(queue, src, len, queue->in);
+    queue->in += len;
+    return len;
+}
+
+/**
+ * @param queue: 操作的队列
+ * @param dst:出队结果所在的内存
+ * @param len:出队的task的个数
+**/
+unsigned int mix_dequeue(mix_queue_t* queue, void* dst,unsigned int len){
+	assert(queue != NULL);
+	unsigned int l;
+
+    l = queue->in - queue->out;
+    if (len > l)
+        len = l;
+
+    __mix_dequeue(queue, dst, len, queue->out);
+    return len;
+}
+
 void mix_queue_free(mix_queue_t* mix_queue){
     assert(mix_queue != NULL);
     free(mix_queue->data);
@@ -67,14 +124,4 @@ void mix_queue_free(mix_queue_t* mix_queue){
     mix_queue->in = 0;
     mix_queue->out = 0;
     mix_queue->mask =0;
-}
-
-static inline unsigned int mix_queue_unused(mix_queue_t *queue)
-{
-        return (queue->mask + 1) - (queue->in - queue->out);
-}
-
-static unsigned int min(unsigned int a, unsigned int b)
-{
-	return (a > b) ? b : a;
 }
