@@ -1,5 +1,5 @@
-#ifndef MIX_QUEUE_H_
-#define MIX_QUEUE_H_
+#ifndef MIX_QUEUE_H
+#define MIX_QUEUE_H
 
 #include <stdlib.h>
 #define EINVAL -1
@@ -36,15 +36,6 @@ typedef struct mix_queue{
     
 //     char padding[9];//保证长度是2的整次幂
 // } __attribute__((packed)) general_task_t;
-
-typedef struct io_task{
-    char* buf;
-    size_t len;
-    size_t offset;
-    u_int8_t opcode;
-    u_int16_t ret_index;
-    char padding[9];//保证结果是2的整次幂 目前是32
-} __attribute__((packed)) io_task_t;
 
 mix_queue_t* mix_queue_init(unsigned int size, unsigned int esize);
 

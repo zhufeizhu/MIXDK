@@ -2,6 +2,7 @@
 #define MIX_SSD_QUEUE_H
 
 #include "mix_queue.h"
+#include "mix_task.h"
 
 int mix_init_ssd_queue(unsigned int, unsigned int);
 

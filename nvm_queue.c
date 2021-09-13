@@ -1,14 +1,8 @@
 #include "nvm_queue.h"
 
-static mix_queue_t* nvm_queue;
+#include "mock_nvm.h"
 
-/**
- * @param task:完成的任务
- * 当前任务完成，写回对应的完成队列中
-**/
-static void mix_task_completed(io_task_t* task){
-    return;
-}
+static mix_queue_t* nvm_queue;
 
 /**
  * @param dst:读取的目标地址
@@ -16,7 +10,7 @@ static void mix_task_completed(io_task_t* task){
  * @param offset:读取的偏移
 **/
 static inline int mix_read_from_nvm(void* dst, unsigned int len, unsigned int offset){
-
+    return mix_mock_nvm_read(dst,len,offset);
 }
 
 /**
@@ -25,7 +19,7 @@ static inline int mix_read_from_nvm(void* dst, unsigned int len, unsigned int of
  * @param offset:写入的偏移
 **/
 static inline int mix_write_to_nvm(void* src, unsigned int len, unsigned int offset){
-    
+    return mix_mock_nvm_write(src,len,offset);
 }
 
 static void* mix_submit_to_nvm(void* arg){
@@ -34,12 +28,12 @@ static void* mix_submit_to_nvm(void* arg){
     while(1){
         io_task_t* task = malloc(TASK_SIZE);
         len = mix_dequeue(nvm_queue,task,1);
-        if(len < 1){
+        if (len < 1) {
             free(task);
             continue;
         }
 
-        switch(task->opcode){
+        switch (task->opcode) {
             case MIX_READ:{
                 ret = mix_read_from_nvm(task->buf,task->len,task->offset);
                 break;
@@ -51,11 +45,22 @@ static void* mix_submit_to_nvm(void* arg){
             default:
                 break;
         }
-
-        mix_task_completed(task);
+        if (ret) {
+            task->on_task_succeed(task->task_index);
+        } else {
+            task->on_task_failed(task->task_index);
+        }
     }
 }
 
 int mix_init_nvm_queue(unsigned int size, int esize){
-    
+    nvm_queue = mix_queue_init(size,esize);
+    pthread_t pid;
+    if(pthread_create(&pid,NULL,mix_submit_to_nvm,NULL)){
+        printf("create ssd queue failed\n");
+        return -1;
+    }
+
+    pthread_join(pid,NULL);
+    return 0;
 }
