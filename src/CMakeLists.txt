@@ -1,0 +1,11 @@
+aux_source_directory(. SRC_LIST)
+
+include_directories(../include)
+
+add_definitions(-Wall -Werror -g)
+
+add_executable(mixdk ${SRC_LIST})
+
+target_link_libraries(mixdk pthread)
+
+set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)

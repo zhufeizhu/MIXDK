@@ -10,8 +10,8 @@ typedef struct scheduler_ctx{
     mix_queue_t* io_queue;
     int max_current;
     pthread_cond_t** completation_conds;
-    pthread_spinlock_t* ctx_lock;
     pthread_mutex_t** ctx_mutex;
+    pthread_spinlock_t* ctx_lock;
     void* lock_bitmap;
 }scheduler_ctx_t;
 

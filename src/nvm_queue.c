@@ -1,6 +1,11 @@
 #include "nvm_queue.h"
 
+#include <pthread.h>
+#include <stdio.h>
+#include <assert.h>
+
 #include "mock_nvm.h"
+
 
 static mix_queue_t* nvm_queue;
 
@@ -22,7 +27,7 @@ static inline int mix_write_to_nvm(void* src, unsigned int len, unsigned int off
     return mix_mock_nvm_write(src,len,offset);
 }
 
-static void* mix_submit_to_nvm(void* arg){
+static void mix_submit_to_nvm(void* arg){
     int len = 0;
     int ret = 0;
     while(1){
@@ -34,11 +39,13 @@ static void* mix_submit_to_nvm(void* arg){
         }
 
         switch (task->opcode) {
-            case MIX_READ:{
+            case MIX_READ:
+            {
                 ret = mix_read_from_nvm(task->buf,task->len,task->offset);
                 break;
             };
-            case MIX_WRITE:{
+            case MIX_WRITE:
+            {
                 ret = mix_write_to_nvm(task->buf,task->len,task->offset);
                 break;
             };
@@ -46,21 +53,26 @@ static void* mix_submit_to_nvm(void* arg){
                 break;
         }
         if (ret) {
-            task->on_task_succeed(task->task_index);
+            task->on_task_succeed(task);
         } else {
-            task->on_task_failed(task->task_index);
+            task->on_task_failed(task);
         }
     }
+    return;
 }
 
-int mix_init_nvm_queue(unsigned int size, int esize){
+int mix_init_nvm_queue(unsigned int size, unsigned int esize){
     nvm_queue = mix_queue_init(size,esize);
     pthread_t pid;
-    if(pthread_create(&pid,NULL,mix_submit_to_nvm,NULL)){
+    if(pthread_create(&pid,NULL,(void*)mix_submit_to_nvm,NULL)){
         printf("create ssd queue failed\n");
         return -1;
     }
-
-    pthread_join(pid,NULL);
     return 0;
+}
+
+int mix_post_task_to_nvm(io_task_t* task){
+    assert(task != NULL);
+    int l = mix_enqueue(nvm_queue,task,1);
+    return l;
 }

@@ -25,8 +25,6 @@ typedef struct mix_queue{
     unsigned int out;
     unsigned int mask;
     unsigned int esize;
-    int (*write)(void*,unsigned int, unsigned int);
-    int (*read)(void*,unsigned int, unsigned int);
     void* data;
 }mix_queue_t;
 

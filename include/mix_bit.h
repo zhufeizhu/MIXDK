@@ -1,7 +1,11 @@
-#include <stdlib.h>
-#include <pthread.h>
-#include <string.h>
-#include <assert.h>
+#ifndef MIX_BIT_H
+#define MIX_BIT_H
+
+int mix_set_bit(int nr, int* addr);
+
+int mix_clear_bit(int nr, int * addr);
+
+int mix_test_bit(int nr, int * addr);
 
 inline int mix_set_bit(int nr,int * addr)  
 {  
@@ -25,7 +29,7 @@ inline int mix_clear_bit(int nr, int * addr)
     return retval;  
 }  
 
-inline int mix_test_bit(int nr, int * addr)  
+inline int mix_test_bit(int nr, int * addr)
 {  
     int mask;  
   
@@ -33,3 +37,5 @@ inline int mix_test_bit(int nr, int * addr)
     mask = 1 << (nr & 0x1f);  
     return ((mask & *addr) != 0);  
 }  
+
+#endif

@@ -3,16 +3,18 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
+#include <assert.h>
 
 #include "mix_task.h"
 #include "scheduler.h"
 
 
-int mix_init(){
+int mixdk_init(){
     mix_init_scheduler(1024*TASK_SIZE,TASK_SIZE,1024);
+    return 0;
 }
 
-int mix_write(void* src,unsigned int len, unsigned int offset){
+int mixdk_write(void* src, unsigned int len, unsigned int offset){
     assert(src != NULL);
     assert(len > 0 && offset >=0);
 
@@ -27,11 +29,13 @@ int mix_write(void* src,unsigned int len, unsigned int offset){
         return 0;
     }
     mix_wait_for_task_completed(ind);
-    return 0; 
+    int ret = task->ret;
+    free(task);
+    return ret; 
 }
 
 
-int mix_read(void* dst,unsigned int len, unsigned int offset){
+int mixdk_read(void* dst,unsigned int len, unsigned int offset){
     assert(dst != NULL);
     assert(len > 0 && offset >=0);
 
@@ -46,5 +50,8 @@ int mix_read(void* dst,unsigned int len, unsigned int offset){
         return 0;
     }
     mix_wait_for_task_completed(ind);
-    return 0; 
+
+    int ret = task->ret;
+    free(task);
+    return ret; 
 }

@@ -45,6 +45,8 @@ static inline unsigned int __mix_enqueue(mix_queue_t* queue, const void* src,uns
 	 * incrementing the fifo->in index counter
 	 */
 	smp_wmb();
+
+	return l;
 }
 
 static inline void __mix_dequeue(mix_queue_t* queue,void* dst, unsigned int len,unsigned int off){
@@ -113,6 +115,7 @@ unsigned int mix_dequeue(mix_queue_t* queue, void* dst,unsigned int len){
         len = l;
 
     __mix_dequeue(queue, dst, len, queue->out);
+	queue->out += len;
     return len;
 }
 
