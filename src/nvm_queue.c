@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <assert.h>
 
-#include "mock_nvm.h"
+#include "nvm.h"
 
 
 static mix_queue_t* nvm_queue;
@@ -15,7 +15,7 @@ static mix_queue_t* nvm_queue;
  * @param offset:读取的偏移
 **/
 static inline int mix_read_from_nvm(void* dst, unsigned int len, unsigned int offset){
-    return mix_mock_nvm_read(dst,len,offset);
+    return mix_nvm_read(dst,len,offset);
 }
 
 /**
@@ -24,7 +24,7 @@ static inline int mix_read_from_nvm(void* dst, unsigned int len, unsigned int of
  * @param offset:写入的偏移
 **/
 static inline int mix_write_to_nvm(void* src, unsigned int len, unsigned int offset){
-    return mix_mock_nvm_write(src,len,offset);
+    return mix_nvm_write(src,len,offset);
 }
 
 static void mix_submit_to_nvm(void* arg){
@@ -53,8 +53,10 @@ static void mix_submit_to_nvm(void* arg){
                 break;
         }
         if (ret) {
+            task->ret = ret;
             task->on_task_succeed(task);
         } else {
+            task->ret = 0;
             task->on_task_failed(task);
         }
     }
@@ -63,6 +65,9 @@ static void mix_submit_to_nvm(void* arg){
 
 int mix_init_nvm_queue(unsigned int size, unsigned int esize){
     nvm_queue = mix_queue_init(size,esize);
+    if(mix_nvm_init()){
+        return -1;
+    }
     pthread_t pid;
     if(pthread_create(&pid,NULL,(void*)mix_submit_to_nvm,NULL)){
         printf("create ssd queue failed\n");

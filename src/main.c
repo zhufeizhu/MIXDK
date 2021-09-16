@@ -1,15 +1,21 @@
 #include "mixdk.h"
+#include <stdio.h>
+#include <string.h>
+
 
 int main(){
     mixdk_init();
-    char buffer1[100];
-    char buffer2[100];
-    int i = 100000;
-    while(i > 0){
-        if(!mixdk_write(buffer1,10,0)){
-            printf("write succeed!");
-        }
-        mixdk_read(buffer2,10,0);
-    }
+    char* buf1 = "hello world";
+
+    int n = mixdk_write(buf1,strlen(buf1),0);
+
+    printf("mix_dk write %d\n",n);
+
+    char buf2[100];
+    memset(buf2,0,100);
+
+    n = mixdk_read(buf2,11,0);
+
+    printf("mix_dk read %d %s\n",n,buf2);
     
 }
