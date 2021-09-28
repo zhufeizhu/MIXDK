@@ -5,14 +5,14 @@
 
 typedef struct nvm_info{
     void* nvm_buffer;
-    unsigned long long block_num;
+    size_t block_num;
     int block_size;
 }nvm_info_t;
 
 int mix_nvm_init();
 
-unsigned int mix_nvm_read(void*,unsigned int, unsigned int);
+size_t  mix_nvm_read(void*,size_t, size_t);
 
-unsigned int mix_nvm_write(void*,unsigned int,unsigned int);
+size_t mix_nvm_write(void*,size_t,size_t);
 
 #endif

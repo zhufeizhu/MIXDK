@@ -7,15 +7,14 @@
 #define TASK_FAILED 1
 
 typedef struct io_task{
-    char* buf;
-    size_t len;
-    size_t offset;
-    u_int8_t opcode;
-    u_int8_t ret;
-    u_int16_t task_index;
-    void (*on_task_succeed)(struct io_task*);
-    void (*on_task_failed)(struct io_task*);
-    char padding[28];//保证结果是2的整次幂 目前是32
+    char* buf;//8
+    size_t len;//4
+    size_t offset;//4
+    size_t ret;//4
+    void (*on_task_completed)(struct io_task*);//8
+    __uint8_t opcode;//1
+    __uint8_t task_index;//1
+    struct io_task* original_task;
 } __attribute__((packed)) io_task_t;
 
 #endif

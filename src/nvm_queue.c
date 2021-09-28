@@ -14,7 +14,7 @@ static mix_queue_t* nvm_queue;
  * @param len:读取的长度
  * @param offset:读取的偏移
 **/
-static inline int mix_read_from_nvm(void* dst, unsigned int len, unsigned int offset){
+static inline size_t mix_read_from_nvm(void* dst, size_t len, size_t offset){
     return mix_nvm_read(dst,len,offset);
 }
 
@@ -23,7 +23,7 @@ static inline int mix_read_from_nvm(void* dst, unsigned int len, unsigned int of
  * @param len:写入的长度
  * @param offset:写入的偏移
 **/
-static inline int mix_write_to_nvm(void* src, unsigned int len, unsigned int offset){
+static inline size_t mix_write_to_nvm(void* src, size_t len, size_t offset){
     return mix_nvm_write(src,len,offset);
 }
 
@@ -52,13 +52,9 @@ static void mix_submit_to_nvm(void* arg){
             default:
                 break;
         }
-        if (ret) {
-            task->ret = ret;
-            task->on_task_succeed(task);
-        } else {
-            task->ret = 0;
-            task->on_task_failed(task);
-        }
+        task->ret = ret;
+        task->on_task_completed(task);
+        free(task);
     }
     return;
 }

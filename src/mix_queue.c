@@ -1,6 +1,9 @@
 #include "mix_queue.h"
 #include <string.h>
 #include <assert.h>
+#include <pthread.h>
+
+static pthread_spinlock_t* queue_lock;
 
 static unsigned int min(unsigned int a, unsigned int b)
 {
@@ -12,8 +15,28 @@ static inline unsigned int __mix_queue_unused(mix_queue_t *queue)
         return (queue->mask + 1) - (queue->in - queue->out);
 }
 
+static inline int fls(int x)
+{
+    int r;
+
+
+    __asm__("bsrl %1,%0\n\t"
+            "jnz 1f\n\t"
+            "movl $-1,%0\n"
+            "1:" : "=r" (r) : "rm" (x));
+    return r+1;
+}
+
+static inline unsigned int roundup_pow_of_two(unsigned int x)
+{
+    return 1UL << fls(x - 1);
+}
+
 static inline int __mix_queue_init(mix_queue_t* queue,void* buffer,unsigned int size, unsigned int esize){
     size = size / esize;
+
+	size = roundup_pow_of_two(size);
+
     queue->in = 0;
     queue->out = 0;
     queue->data = buffer;
@@ -38,6 +61,7 @@ static inline unsigned int __mix_enqueue(mix_queue_t* queue, const void* src,uns
 		len *= esize;
 	}
 	l = min(len, size - off);
+
     memcpy(queue->data + off, src, l);
 	memcpy(queue->data, src + l, len - l);
 	/*
@@ -90,6 +114,7 @@ mix_queue_t* mix_queue_init(unsigned int size, unsigned int esize){
 **/
 unsigned int mix_enqueue(mix_queue_t* queue, const void* src, unsigned int len){
 	assert(queue != NULL);
+
 	unsigned int l;
 
     l = __mix_queue_unused(queue);
@@ -111,6 +136,11 @@ unsigned int mix_dequeue(mix_queue_t* queue, void* dst,unsigned int len){
 	unsigned int l;
 
     l = queue->in - queue->out;
+
+	if(l == 0){
+		return l;
+	}
+
     if (len > l)
         len = l;
 

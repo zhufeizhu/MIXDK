@@ -15,7 +15,7 @@
  #endif
 #endif
 
-#define TASK_SIZE (sizeof(struct io_task))
+#define TASK_SIZE (sizeof(io_task_t))
 
 #define MIX_WRITE 1
 #define MIX_READ 1<<1

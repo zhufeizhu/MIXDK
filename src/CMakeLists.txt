@@ -2,7 +2,7 @@ aux_source_directory(. SRC_LIST)
 
 include_directories(../include)
 
-add_definitions(-Wall -Werror -g)
+add_definitions(-Wall -g)
 
 add_executable(mixdk ${SRC_LIST})
 

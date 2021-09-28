@@ -21,8 +21,8 @@ int mix_nvm_init(){
     return 0;
 }
 
-unsigned int mix_nvm_read(void* dst, unsigned int len, unsigned int offset){
-    unsigned int l = 0;
+size_t mix_nvm_read(void* dst, size_t len, size_t offset){
+    size_t l = 0;
     if((len + offset) > nvm_info->block_num * nvm_info->block_size){
         l = nvm_info->block_num * nvm_info->block_size - offset;
     }else{
@@ -34,8 +34,8 @@ unsigned int mix_nvm_read(void* dst, unsigned int len, unsigned int offset){
     return l;
 }
 
-unsigned int mix_nvm_write(void* src, unsigned int len, unsigned int offset){
-    unsigned int l = 0;
+size_t mix_nvm_write(void* src, size_t len, size_t offset){
+    size_t l = 0;
     if((len + offset) > nvm_info->block_num * nvm_info->block_size){
         l = nvm_info->block_num * nvm_info->block_size - offset;
     }else{

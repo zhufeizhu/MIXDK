@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <assert.h>
 
-#include "mock_ssd.h"
+#include "ssd.h"
 
 static mix_queue_t* ssd_queue;
 
@@ -13,16 +13,15 @@ static mix_queue_t* ssd_queue;
 /**
  * 从ssd中读数据
 **/
-static inline int mix_read_from_ssd(void* dst,unsigned int len, unsigned int offset){
-    return mix_mock_ssd_read(dst,len,offset);
+static inline int mix_read_from_ssd(void* dst,size_t len, size_t offset){
+    return mix_ssd_read(dst,len,offset);
 }
-
 
 /**
  * 向ssd中写数据
 **/
-static inline int mix_write_to_ssd(void* src,unsigned int len, unsigned int offset){
-    return mix_mock_ssd_write(src,len,offset);
+static inline int mix_write_to_ssd(void* src,size_t len, size_t offset){
+    return mix_ssd_write(src,len,offset);
 }
 
 static void mix_submit_to_ssd(void* arg){
@@ -39,26 +38,29 @@ static void mix_submit_to_ssd(void* arg){
         switch(task->opcode){
             case MIX_READ:
             {
-                ret = mix_write_to_ssd(task->buf,task->len,task->offset);
+                ret = mix_read_from_ssd(task->buf,task->len,task->offset);
                 break;
             };
             case MIX_WRITE:
             {
-                ret = mix_read_from_ssd(task->buf,task->len,task->offset);
+                ret = mix_write_to_ssd(task->buf,task->len,task->offset);
                 break;
             }
         }
-        if(ret){
-            task->on_task_succeed(task);
-        }else{
-            task->on_task_failed(task);
-        }
+        task->ret = ret;
+        task->on_task_completed(task);
+        free(task);
     }
     return;
 }
 
 int mix_init_ssd_queue(unsigned int size, unsigned int esize){
+    if(mix_ssd_init()){
+        return -1;
+    }
+    
     ssd_queue = mix_queue_init(size,esize);
+    
     pthread_t pid;
     if(pthread_create(&pid,NULL,(void*)mix_submit_to_ssd,NULL)){
         printf("create ssd queue failed\n");
