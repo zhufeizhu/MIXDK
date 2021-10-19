@@ -152,6 +152,33 @@ main.c.s:
 	cd /zhuqs/mixdk && $(MAKE) -f src/CMakeFiles/mixdk.dir/build.make src/CMakeFiles/mixdk.dir/main.c.s
 .PHONY : main.c.s
 
+mix_lockless_queue.o: mix_lockless_queue.c.o
+
+.PHONY : mix_lockless_queue.o
+
+# target to build an object file
+mix_lockless_queue.c.o:
+	cd /zhuqs/mixdk && $(MAKE) -f src/CMakeFiles/mixdk.dir/build.make src/CMakeFiles/mixdk.dir/mix_lockless_queue.c.o
+.PHONY : mix_lockless_queue.c.o
+
+mix_lockless_queue.i: mix_lockless_queue.c.i
+
+.PHONY : mix_lockless_queue.i
+
+# target to preprocess a source file
+mix_lockless_queue.c.i:
+	cd /zhuqs/mixdk && $(MAKE) -f src/CMakeFiles/mixdk.dir/build.make src/CMakeFiles/mixdk.dir/mix_lockless_queue.c.i
+.PHONY : mix_lockless_queue.c.i
+
+mix_lockless_queue.s: mix_lockless_queue.c.s
+
+.PHONY : mix_lockless_queue.s
+
+# target to generate assembly for a file
+mix_lockless_queue.c.s:
+	cd /zhuqs/mixdk && $(MAKE) -f src/CMakeFiles/mixdk.dir/build.make src/CMakeFiles/mixdk.dir/mix_lockless_queue.c.s
+.PHONY : mix_lockless_queue.c.s
+
 mix_queue.o: mix_queue.c.o
 
 .PHONY : mix_queue.o
@@ -407,6 +434,9 @@ help:
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
+	@echo "... mix_lockless_queue.o"
+	@echo "... mix_lockless_queue.i"
+	@echo "... mix_lockless_queue.s"
 	@echo "... mix_queue.o"
 	@echo "... mix_queue.i"
 	@echo "... mix_queue.s"

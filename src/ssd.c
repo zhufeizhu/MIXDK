@@ -10,18 +10,18 @@ ssd_info_t* ssd_info;
 
 int mix_ssd_init(){
     ssd_info = malloc(sizeof(ssd_info_t));
-    ssd_info->block_num = 1024 * 1024;
+    ssd_info->block_num = 1024 * 1024 * 1024;
     ssd_info->block_size = SSD_BLOCK_SIZE;
     ssd_info->ssd_fd = open("/dev/sdb",O_RDWR);
     if(ssd_info->ssd_fd < 0){
         perror("mix_ssd_init");
         return -1;
     }
-    ssd_info->ssd_capacity = ssd_info->block_num * SSD_BLOCK_SIZE;
+    ssd_info->ssd_capacity = (size_t)1024 * 1024 * 1024 * 1024;
     return 0;
 }
 
-size_t mix_ssd_read(void* dst, size_t len, size_t offset){
+size_t mix_ssd_read(void* dst, size_t len, size_t offset,size_t flags){
     size_t l = len;
     if((len + offset) > ssd_info->ssd_capacity){
         l = ssd_info->ssd_capacity - offset;
@@ -35,17 +35,29 @@ size_t mix_ssd_read(void* dst, size_t len, size_t offset){
     return n;
 }
 
-size_t mix_ssd_write(void* src, size_t len, size_t offset){
+static size_t local_time = 0;
+
+size_t mix_ssd_write(void* src, size_t len, size_t offset,size_t flag){
     size_t l = len;
     if((len + offset) > ssd_info->ssd_capacity){
         l = ssd_info->ssd_capacity - offset;
     }
 
     int n = pwrite(ssd_info->ssd_fd,src,l,offset);
+    //printf("mix ssd write: len:%llu, offset:%llu\n",len,offset);
+
+
     if(n <= 0){
         perror("mix_ssd_write");
         return 0;
     }
-    printf("offset is %d, len is %d\n",offset ,l);
+
+    if(flag & MIX_SYNC){
+        local_time++;
+        //printf("%llu sync\n",local_time);
+        sync();
+        //fsync(ssd_info->ssd_fd);
+    }
+    
     return n;
 }
