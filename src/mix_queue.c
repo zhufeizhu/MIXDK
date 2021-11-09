@@ -1,9 +1,7 @@
 #include "mix_queue.h"
 #include <string.h>
 #include <assert.h>
-#include <pthread.h>
-
-static pthread_spinlock_t* queue_lock;
+#include <stdatomic.h>
 
 static unsigned int min(unsigned int a, unsigned int b)
 {
@@ -113,8 +111,6 @@ mix_queue_t* mix_queue_init(unsigned int size, unsigned int esize){
  * 
 **/
 unsigned int mix_enqueue(mix_queue_t* queue, const void* src, unsigned int len){
-	assert(queue != NULL);
-
 	unsigned int l;
 
     l = __mix_queue_unused(queue);
@@ -126,13 +122,31 @@ unsigned int mix_enqueue(mix_queue_t* queue, const void* src, unsigned int len){
     return len;
 }
 
+unsigned int mix_enqueue_lockfree(mix_queue_t* queue, const void* src, unsigned int len){
+	unsigned int l;
+
+    l = __mix_queue_unused(queue);
+    if (len > l)
+          len = l;
+
+	unsigned int in_ = 0; 
+	do{
+		in_ = queue->in;
+	}while(!atomic_compare_exchange_weak(&(queue->in),&in_,in_ + len));
+
+    __mix_enqueue(queue, src, len, in_);
+    
+	//queue->in += len;
+
+    return len;
+}
+
 /**
  * @param queue: 操作的队列
  * @param dst:出队结果所在的内存
  * @param len:出队的task的个数
 **/
 unsigned int mix_dequeue(mix_queue_t* queue, void* dst,unsigned int len){
-	assert(queue != NULL);
 	unsigned int l;
 
     l = queue->in - queue->out;
@@ -146,6 +160,30 @@ unsigned int mix_dequeue(mix_queue_t* queue, void* dst,unsigned int len){
 
     __mix_dequeue(queue, dst, len, queue->out);
 	queue->out += len;
+    return len;
+}
+
+unsigned int mix_dequeue_lockfree(mix_queue_t* queue, void* dst,unsigned int len){
+	unsigned int l;
+
+    l = queue->in - queue->out;
+
+	if(l == 0){
+		return l;
+	}
+
+    if (len > l)
+        len = l;
+
+	unsigned int out_;
+
+	do{
+		out_ = queue->out;
+	}while(!atomic_compare_exchange_weak(&(queue->out),&out_,out_ + len));
+
+    __mix_dequeue(queue, dst, len, out_);
+
+	//queue->out += len;
     return len;
 }
 

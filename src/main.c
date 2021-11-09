@@ -4,6 +4,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <sys/time.h>
 
 int thread_num = 0;
 int task_num = 0;
@@ -17,9 +18,10 @@ char buf1[BUF_SIZE];
 void* write_func(void* arg){
     int idx = *(int*)arg;
     size_t flags = MIX_SYNC;
-    for(int i = idx; i < task_num; i += thread_num){
-        //printf("[%d]:task %d\n",idx,i);
-        mixdk_write(buf1,BUF_SIZE,offset + BUF_SIZE * i,flags,i);
+    for(size_t i = idx; i < task_num; i += thread_num){
+        //if(i > 500000)
+        //printf("[%d]:task offset is %llu\n",idx,offset + BUF_SIZE * i);
+        mixdk_write(buf1,1,offset + i,flags,i);
         //printf("finish %d\n",i);
     }
     //printf("over\n");
@@ -36,7 +38,8 @@ int main(int argc, char** argv){
     memset(buf1,c,BUF_SIZE);
     // int n = 0;
     pthread_t* pids = malloc(sizeof(pthread_t*)*thread_num);
-    time_t start  = time(NULL);
+    struct timespec start,end;
+
     int* idx = (int*)malloc(sizeof(int)*thread_num);
     for(int i = 0; i < thread_num; i++){
         idx[i] = i;
@@ -45,6 +48,8 @@ int main(int argc, char** argv){
             return 0;
         }
     }
+    clock_gettime(CLOCK_MONOTONIC_RAW,&start);
+
     int pre_task_num = 0;
     int current_task_num = 0;
     int retry_time = 0;
@@ -61,6 +66,6 @@ int main(int argc, char** argv){
             sleep(1);
         }
     }
-    time_t end = time(NULL);
-    printf("time is %ld\n",end-start);
+    clock_gettime(CLOCK_MONOTONIC_RAW,&end);
+    printf("time is %lu us\n",(end.tv_sec - start.tv_sec)*1000000 + (end.tv_nsec - start.tv_nsec)/1000);
 }

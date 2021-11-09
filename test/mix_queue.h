@@ -36,8 +36,14 @@ mix_queue_t* mix_queue_init(unsigned int size, unsigned int esize);
 
 unsigned int mix_enqueue(mix_queue_t* queue, const void* src,unsigned int len);
 
+unsigned int mix_enqueue_lockfree(mix_queue_t* queue, const void* src,unsigned int len);
+
 unsigned int mix_dequeue(mix_queue_t* queue,void* dst, unsigned int len);
 
+unsigned int mix_dequeue_lockfree(mix_queue_t* queue,void* dst, unsigned int len);
+
 void mix_queue_free(mix_queue_t* queue);
+
+
 
 #endif //MIXDK_MIX_QUEUE

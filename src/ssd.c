@@ -8,17 +8,21 @@
 
 ssd_info_t* ssd_info;
 
-int mix_ssd_init(){
+/**
+ * 打开裸设备进行读写
+**/
+ssd_info_t* mix_ssd_init(){
     ssd_info = malloc(sizeof(ssd_info_t));
     ssd_info->block_num = 1024 * 1024 * 1024;
     ssd_info->block_size = SSD_BLOCK_SIZE;
     ssd_info->ssd_fd = open("/dev/sdb",O_RDWR);
     if(ssd_info->ssd_fd < 0){
+        free(ssd_info);
         perror("mix_ssd_init");
-        return -1;
+        return NULL;
     }
     ssd_info->ssd_capacity = (size_t)1024 * 1024 * 1024 * 1024;
-    return 0;
+    return ssd_info;
 }
 
 size_t mix_ssd_read(void* dst, size_t len, size_t offset,size_t flags){
@@ -55,7 +59,7 @@ size_t mix_ssd_write(void* src, size_t len, size_t offset,size_t flag){
     if(flag & MIX_SYNC){
         local_time++;
         //printf("%llu sync\n",local_time);
-        sync();
+        fsync(ssd_info->ssd_fd);
         //fsync(ssd_info->ssd_fd);
     }
     

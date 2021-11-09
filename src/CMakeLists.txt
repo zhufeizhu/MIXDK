@@ -1,3 +1,5 @@
+set(CMAKE_C_STANDARD 11)
+
 aux_source_directory(. SRC_LIST)
 
 include_directories(../include)

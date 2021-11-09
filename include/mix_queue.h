@@ -2,6 +2,7 @@
 #define MIX_QUEUE_H
 
 #include <stdlib.h>
+#include <stdatomic.h>
 #define EINVAL -1
 #if 1
 #define smp_wmb()	__sync_synchronize()
@@ -17,14 +18,12 @@
 
 #define TASK_SIZE (sizeof(io_task_t))
 
-#define MIX_WRITE 1
-#define MIX_READ 1<<1
-
 typedef struct mix_queue{
     unsigned int in;
     unsigned int out;
     unsigned int mask;
     unsigned int esize;
+    _Atomic 
     void* data;
 }mix_queue_t;
 

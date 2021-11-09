@@ -3,13 +3,13 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include "mixdk.h"
 #include "ssd.h"
 
 static mix_queue_t* ssd_queue;
-
-#define BLOCK_SIZE 4096
+static atomic_int completed_ssd_task_num = 0;
 
 /**
  * 从ssd中读数据
@@ -25,7 +25,15 @@ static inline int mix_write_to_ssd(void* src,size_t len, size_t offset,size_t fl
     return mix_ssd_write(src,len,offset,flags);
 }
 
-static size_t local_time = 0;
+atomic_int mix_get_completed_ssd_task_num(){
+    return completed_ssd_task_num;
+}
+
+static inline void mix_ssd_task_completed(io_task_t* task){
+    completed_ssd_task_num++;
+    if(task->flag == NULL) return;
+    atomic_store(task->flag,true);
+}
 
 static void mix_submit_to_ssd(void* arg){
     int len = 0;
@@ -53,17 +61,23 @@ static void mix_submit_to_ssd(void* arg){
                 ret = mix_write_to_ssd(task->buf,task->len,task->offset,task->opcode);
                 break;
             }
+            default:
+                ret = 0;
+                break;
         }
         task->ret = ret;
-        task->on_task_completed(task);
+        mix_ssd_task_completed(task);
         free(task);
     }
     return;
 }
 
-int mix_init_ssd_queue(unsigned int size, unsigned int esize){
-    if(mix_ssd_init()){
-        return -1;
+ssd_info_t* mix_init_ssd_queue(unsigned int size, unsigned int esize){
+    ssd_info_t* ssd_info = mix_ssd_init();
+    
+    if(ssd_info == NULL)
+    {
+        return NULL;
     }
     
     ssd_queue = mix_queue_init(size,esize);
@@ -71,9 +85,10 @@ int mix_init_ssd_queue(unsigned int size, unsigned int esize){
     pthread_t pid;
     if(pthread_create(&pid,NULL,(void*)mix_submit_to_ssd,NULL)){
         printf("create ssd queue failed\n");
-        return -1;
+        free(ssd_info);
+        return NULL;
     }
-    return 0;
+    return ssd_info;
 }
 
 /**
@@ -83,10 +98,9 @@ int mix_init_ssd_queue(unsigned int size, unsigned int esize){
 
 int mix_post_task_to_ssd(io_task_t* task){
     assert(task != NULL);
-    int len = 0;
-    while(len == 0){
-        len = mix_enqueue(ssd_queue,task,1);
+    int l = 0;
+    while(l == 0){
+        l = mix_enqueue(ssd_queue,task,1);
     }
-    return len;
+    return l;
 }
-

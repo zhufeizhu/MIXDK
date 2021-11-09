@@ -5,14 +5,15 @@
 #endif
 #include <assert.h>
 #include <stdio.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <stdbool.h>
 
 #include "mix_task.h"
 #include "scheduler.h"
 
-int a = 1;
-
 int mixdk_init(){
-    mix_init_scheduler((size_t)4096*TASK_SIZE,TASK_SIZE,4096);
+    mix_init_scheduler(4096*TASK_SIZE,TASK_SIZE,4096);
     return 0;
 }
 
@@ -26,7 +27,9 @@ size_t mixdk_write(void* src, size_t len, size_t offset, size_t flags, int idx){
     task->offset = offset;
     task->opcode = MIX_WRITE|flags;
     task->task_index = idx;
-    task->original_task = task;
+    task->flag = NULL;
+
+    //printf("offset is %llu\n",offset);
     
     int ind = mix_post_task_to_io(task);
     if(ind < 0){
@@ -49,18 +52,19 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx){
     task->offset = offset;
     task->opcode = MIX_READ|flags;
     task->task_index = idx;
+    atomic_bool read_finish_flag = false;
+    task->flag = &read_finish_flag;
     
     int ind = mix_post_task_to_io(task);
     if(ind < 0){
         return 1;
     }
-    //mix_wait_for_task_completed(ind);
-    //int ret =  task->ret;
+
+    mix_wait_for_task_completed(&read_finish_flag);
 
     free(task);
     return 0; 
 }
-
 size_t mix_completed_task_num(){
     return get_completed_task_num();
 }

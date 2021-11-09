@@ -4,7 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 
-int main(){
+int main(int argc, char** argv){
+    int offset_t = atoi(argv[1]);
+
     int block_size = 4096;//4K
     int len = 4096;//1G
 
@@ -39,9 +41,9 @@ int main(){
     char buf2[4096];
 
     char buf1[4096];
-    memset(buf1,'o',4096);
+    memset(buf1,'0',4096);
 
-    size_t off = 1 * 4096;//(size_t)6312320*4096;
+    size_t off = (size_t)offset_t*4096;
     // len = pwrite(raw_ssd_fd,buf1,4096,off);
     
     len = pread(raw_ssd_fd,buf2,4096,off);
