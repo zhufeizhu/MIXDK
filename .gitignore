@@ -1,1 +1,5 @@
 .vscode/
+src/CMakeFiles
+test/CMakeFiles
+src/bin
+test/bin

@@ -10,16 +10,19 @@
 #include "mixdk.h"
 #include "ssd_queue.h"
 #include "nvm_queue.h"
-#include "mix_bit.h"
+#include "mix_meta.h"
 
 #define NVM_TASK 1
 #define SSD_TASK 2
-#define UNDEF_TASK 3
+#define REDIRECT_NVM_TASK 3
+#define UNDEF_TASK 4
 
 static scheduler_ctx_t *sched_ctx = NULL;
 
 static size_t nvm_size = (size_t)128 * 1024 * 1024 * 1024;  //128 G
 static size_t ssd_size = (size_t)1024 * 1024 * 1024 * 1024; //1T
+
+static const size_t threshold = 4096; 
 
 int mix_wait_for_task_completed(atomic_bool* flag){
     while(atomic_load(flag) == false){};
@@ -61,10 +64,30 @@ static inline int schedule(io_task_t *task)
     }
     
     if ((size_t)task->offset >= nvm_size && (size_t)task->offset < (nvm_size + ssd_size)) {
-        task->offset -= nvm_size;
-        // printf("ssd task\n");
-        return SSD_TASK;
+        //先考虑写
+        if(task->opcode & MIX_WRITE){
+            task->offset -= nvm_size;
+            if(task->len <= threshold){//将写向ssd的小块 重定向的nvm中
+                task->redirect = 1;
+                return NVM_TASK;
+            }else{
+                return SSD_TASK;
+            }
+        }else if(task->op_code & MIX_READ){
+            //仅针对小于threshold的读 判断是否需要到buffer中重定向
+            if(task->len <= threshold){
+                size_t offset = mix_get_buffer(task->offset);
+                // 如果offset<0 标明不在buffer中 但是在此之前需要将该task平行放到ssdqueue中进行获取
+                // 目的是保证获取的延迟
+                if(offset > 0){
+                    task->offset = offset;
+                }
+            }
+            //
+        }
     }
+
+
     //printf("[task offset]:%llu\n [nvm_size]:%llu\n [ssd_size]:%llu\n",(size_t)task->offset,nvm_size,ssd_size);
     return UNDEF_TASK;
 }

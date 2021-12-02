@@ -15,7 +15,9 @@ typedef struct io_task{
     size_t ret;//4
     size_t opcode;//1
     size_t task_index;//1
+    __uint8_t redirect;
     atomic_bool* flag;
+    __uint8_t queue_idx;
 } __attribute__((packed)) io_task_t;
 
 #endif

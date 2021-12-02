@@ -1,41 +1,23 @@
 #ifndef MIX_BIT_H
 #define MIX_BIT_H
+#include <unistd.h>
 
-int mix_set_bit(int nr, int* addr);
+typedef struct{
+    void* bits;
+    __uint32_t bits_num;
+    __uint32_t next_bit;
+}mix_bitmap;
 
-int mix_clear_bit(int nr, int * addr);
+mix_bitmap* mix_init_bitmap(size_t size);
 
-int mix_test_bit(int nr, int * addr);
+inline int mix_next_zero_bit(mix_bitmap* bitmap);
 
-inline int mix_set_bit(int nr,int * addr)  
-{  
-    int mask, retval;  
+int mix_set_bit(int nr, mix_bitmap* bitmap);
 
-    addr += nr >> 5;                 //nr大于31时，把高27的值做为当前地址的偏移，  
-    mask = 1 << (nr & 0x1f);         //获取31范围内的值，并把1向左偏移该位数  
-    retval = (mask & *addr) != 0;    //位置置1  
-    *addr |= mask;  
-    return retval;                   //返回置数值  
-}  
+int mix_clear_bit(int nr, mix_bitmap* bitmap);
 
-inline int mix_clear_bit(int nr, int * addr)  
-{  
-    int mask, retval;  
-  
-    addr += nr >> 5;  
-    mask = 1 << (nr & 0x1f);  
-    retval = (mask & *addr) != 0;  
-    *addr &= ~mask;  
-    return retval;  
-}  
+int mix_test_bit(int nr, mix_bitmap* bitmap);
 
-inline int mix_test_bit(int nr, int * addr)
-{  
-    int mask;  
-  
-    addr += nr >> 5;  
-    mask = 1 << (nr & 0x1f);  
-    return ((mask & *addr) != 0);  
-}  
+int mix_get_bit(int *addr, mix_bitmap* bitmap);
 
 #endif

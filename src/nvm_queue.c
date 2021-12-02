@@ -6,8 +6,12 @@
 #include <stdbool.h>
 
 #include "nvm.h"
+#include "mix_hash.h"
+
 
 #define NVM_QUEUE_NUM 4
+#define BLOCK_SZIE 4096
+
 static mix_queue_t** nvm_queue;
 _Atomic int completed_nvm_task_num = 0;
 
@@ -42,6 +46,10 @@ atomic_int mix_get_completed_nvm_task_num(){
 
 static atomic_int task_num = 0;
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 static void mix_submit_to_nvm(void* arg){
     int i = *(int*)arg;
     //printf("init nvm queue %d\n",i);
@@ -65,6 +73,11 @@ static void mix_submit_to_nvm(void* arg){
             };
             case MIX_WRITE:
             {
+                if (task->redirect == 1){
+                    //需要重新确定下写的位置
+                    task->offset = get_next_free_segment(i,task);
+                }
+
                 ret = mix_write_to_nvm(task->buf,task->len,task->offset,task->opcode);
                 break;
             };
@@ -88,6 +101,12 @@ nvm_info_t* mix_init_nvm_queue(unsigned int size, unsigned int esize){
     }
 
     nvm_queue = malloc(NVM_QUEUE_NUM * sizeof(mix_queue_t*));
+    if(nvm_queue == NULL){
+        perror("alloc memory for mix queue failed\n");
+    }
+
+    mix_hash = mix_hash_init();
+
     for(int i = 0; i < NVM_QUEUE_NUM; i++){
         nvm_queue[i] = mix_queue_init(size,esize);
     }
@@ -118,8 +137,12 @@ int retry_time = 0;
 int mix_post_task_to_nvm(io_task_t* task){
     int l = 0;
     while(l == 0){
-        l= mix_enqueue(nvm_queue[pre_nvm_ind],task,1);
-        pre_nvm_ind = (pre_nvm_ind + 1)%NVM_QUEUE_NUM;
+        if(task->queue_idx < 0){
+            l= mix_enqueue(nvm_queue[pre_nvm_ind],task,1);
+            pre_nvm_ind = (pre_nvm_ind + 1)%NVM_QUEUE_NUM;
+        }else{
+            l = mix_enqueue(nvm_queue[task->queue_idx],task,1);
+        }
     }
     return l;
 }

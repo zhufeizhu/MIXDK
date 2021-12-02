@@ -2,8 +2,6 @@
 #define MIXDK_NVM_H
 
 #include "mixdk.h"
-
-
 typedef struct nvm_info{
     void* nvm_buffer; //nvm的内存
     size_t block_num; 
