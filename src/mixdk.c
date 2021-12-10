@@ -26,8 +26,8 @@ size_t mixdk_write(void* src, size_t len, size_t offset, size_t flags, int idx){
     task->len = len;
     task->offset = offset;
     task->opcode = MIX_WRITE|flags;
-    task->task_index = idx;
-    task->flag = NULL;
+    //task->task_index = idx;
+    //task->flag = NULL;
 
     //printf("offset is %llu\n",offset);
     
@@ -51,7 +51,6 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx){
     task->len = len;
     task->offset = offset;
     task->opcode = MIX_READ|flags;
-    task->task_index = idx;
     atomic_bool read_finish_flag = false;
     task->flag = &read_finish_flag;
     

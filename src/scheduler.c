@@ -8,6 +8,7 @@
 #include <stdbool.h>
 
 #include "mixdk.h"
+#include "mix_task.h"
 #include "ssd_queue.h"
 #include "nvm_queue.h"
 #include "mix_meta.h"
@@ -17,12 +18,13 @@
 #define REDIRECT_NVM_TASK 3
 #define UNDEF_TASK 4
 
-static scheduler_ctx_t *sched_ctx = NULL;
 
+//数据定义区
+static scheduler_ctx_t *sched_ctx = NULL;
 static size_t nvm_size = (size_t)128 * 1024 * 1024 * 1024;  //128 G
 static size_t ssd_size = (size_t)1024 * 1024 * 1024 * 1024; //1T
-
-static const size_t threshold = 4096; 
+static const size_t threshold = 4096;
+static io_task_v task_v;//最大支持存放1024个task
 
 int mix_wait_for_task_completed(atomic_bool* flag){
     while(atomic_load(flag) == false){};
@@ -56,11 +58,20 @@ int mix_post_task_to_io(io_task_t *task)
     return l;
 }
 
-static inline int schedule(io_task_t *task)
+/**
+ * @brief 根据传入的task 将其拆分成多个task(io_task_v) 需要将其中的每个task进行处理
+ * 
+ * @param task 用户传入的io操作
+ * @return io_task_t** 对用户传入的io操作的拆分
+ */
+static inline void schedule(io_task_t *task)
 {
+    //当前task的offset在nvm的范围内
     if ((size_t)task->offset < nvm_size && task->offset >= 0) {
         // printf("nvm task\n");
-        return NVM_TASK;
+        task->type = NVM_TASK;
+        task_v.tasks[task_v.num++] = task;
+        return;
     }
     
     if ((size_t)task->offset >= nvm_size && (size_t)task->offset < (nvm_size + ssd_size)) {
@@ -68,21 +79,27 @@ static inline int schedule(io_task_t *task)
         if(task->opcode & MIX_WRITE){
             task->offset -= nvm_size;
             if(task->len <= threshold){//将写向ssd的小块 重定向的nvm中
+                task->type = NVM_TASK;
                 task->redirect = 1;
-                return NVM_TASK;
+                task_v.tasks[task_v.num++] = task;
             }else{
-                return SSD_TASK;
+                task->type = SSD_TASK;
+                task_v.tasks[task_v.num++] = task;
             }
+            return;
         }else if(task->op_code & MIX_READ){
             //仅针对小于threshold的读 判断是否需要到buffer中重定向
-            if(task->len <= threshold){
-                size_t offset = mix_get_buffer(task->offset);
+            size_t block_num = task->len >> BLOCK_SIZE_BITS;
+            for(int i = 0; i < block_num; i++){
+                size_t offset = mix_get_buffer_by_bloom_filter(task->offset);
                 // 如果offset<0 标明不在buffer中 但是在此之前需要将该task平行放到ssdqueue中进行获取
                 // 目的是保证获取的延迟
-                if(offset > 0){
-                    task->offset = offset;
+                    if(offset > 0){
+                        task->offset = offset;
+                    }
                 }
             }
+            
             //
         }
     }

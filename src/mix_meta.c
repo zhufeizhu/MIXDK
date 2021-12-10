@@ -1,8 +1,12 @@
 #include "mix_meta.h"
+#include "mix_bitmap.h"
+#include "mix_hash.h"
+#include "mix_bloom_filter.h"
+
 #include <stdbool.h>
 
 static free_segment_t* segments;
-static mix_hash_t* mix_hash;
+static mix_hash_t* mix_hash; 
 
 bool mix_init_free_segment(int fragment_num, int block_num){
     segments = (free_segment_t*)malloc(fragment_num * sizeof(free_segment_t));
@@ -37,6 +41,62 @@ size_t get_next_free_segment(int idx, io_task_t* task){
     return segment.head + segment.next * BLOCK_SZIE;
 }
 
-size_t mix_get_buffer(size_t offset){
-    
+void mix_init_free_segment(int fragment_num);
+
+
+/**
+ * @brief 将给定的offset添加到bloom filter中
+ * 
+ * @param offset 重定向得到的offset
+ */
+void mix_set_buffer_for_bloom_filter(size_t offset){
+
+}
+
+/**
+ * @brief 将给定的offset添加到hash table中
+ * 
+ * @param offset 重定向得到的offset
+ */
+void mix_set_buffer_for_hash_table(size_t offset){
+
+}
+
+/**
+ * @brief 获取指定idx的segment的空闲块 并返回对应的offset
+ * 
+ * @param idx 
+ * @param task 
+ * @return size_t 
+ */
+size_t mix_get_next_free_segment(int idx, io_task_t* task);
+
+/**
+ * @brief mix_get_buffer的子查询 从bloom_filter中查询指定的offset是否不存在
+ * 
+ * @param offset 
+ * @return size_t 
+ */
+size_t mix_get_buffer_by_bloom_filter(size_t offset);
+
+/**
+ * @brief mix_get_buffer的子查询 从hash_table中查询给定的offset所指向的key是否存在
+ * 
+ * @param offset 
+ * @return size_t 
+ */
+size_t mix_get_buffer_by_hash_table(size_t offset);
+
+/**
+ * @brief 查询buffer中是否有指定offset的block 如果有则返回其在buffer中的offset 
+   查询分为三个阶段
+   1. 在对应的bloom filter中找 可以直接判断其是否不在buffer中
+   2. 在全局的hash table中找 可以查询其所在的buffer中的偏移
+   3. 将查询到的结果返回
+ * 
+ * @param offset 需要查询的block的offset
+ * @return size_t 查询到的其在buffer中的offset 如果没有找到则返回-1
+ */
+size_t mix_get_buffer(int offset){
+
 }
