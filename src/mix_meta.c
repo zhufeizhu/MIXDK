@@ -1,102 +1,114 @@
 #include "mix_meta.h"
-#include "mix_bitmap.h"
-#include "mix_hash.h"
-#include "mix_bloom_filter.h"
 
-#include <stdbool.h>
+#include <stdlib.h>
 
-static free_segment_t* segments;
-static mix_hash_t* mix_hash; 
+#include "mix_log.h"
 
-bool mix_init_free_segment(int fragment_num, int block_num){
-    segments = (free_segment_t*)malloc(fragment_num * sizeof(free_segment_t));
-    if(segments == NULL){
+static mix_metadata_t* meta_data;
+
+/**
+ * @brief 申请并初始化metadata 包括全局的hash 全局的bloom_filter 全局的free_segment等
+ * 
+**/
+bool mix_init_metadata(uint32_t offset,uint32_t block_num){
+    meta_data = malloc(sizeof(mix_metadata_t));
+    if(meta_data == NULL){
+        mix_log("mix_init_metadata","malloc for metadata failed");
         return false;
     }
 
-    for(int i = 0; i < fragment_num; i++){
-        segments[i].bitmap = mix_init_bitmap(block_num);
-        
-        segments[i].
+    meta_data->block_num = block_num;
+    meta_data->size = block_num * BLOCK_SIZE;
+    meta_data->offset = offset;
+    meta_data->per_block_num = block_num / SEGMENT_NUM;
+    meta_data->bloom_filter = mix_init_counting_bloom_filter(block_num,0.01);
+    if(meta_data->bloom_filter == NULL){
+        return false;
     }
+    meta_data->hash = mix_init_hash(20);
+    if(meta_data->hash == NULL){
+        return false;
+    }
+    
+    size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
+    for(int i = 0; i < SEGMENT_NUM; i++){
+        if(!mix_init_free_segment(&(meta_data->segments[i]),offset + i * per_segment_size, per_segment_size)){
+            mix_log("mix_init_metadata","init free segment faield");
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * @brief 申请并初始化segment
+ * 
+ * @param size 每个segment的大小
+ */
+bool mix_init_free_segment(free_segment_t* segment, uint32_t offset, uint32_t size){
+    if(segment == NULL)  return false;
+    segment->bitmap = mix_bitmap_init(size/BLOCK_SIZE);
+    segment->block_num = size / BLOCK_SIZE;
+    segment->size = size;
+    segment->head = offset;
+    return true;
 };
 
-
-//获取重定向后写的位置
-size_t get_next_free_segment(int idx, io_task_t* task){
-    free_segment_t segment = segments[idx];
-
-    size_t next = segment.next;
-    int bitx = 0;
-    int bity = 0;
-    __uint8_t mask = 0;
-    do{
-        bitx = next/8;
-        bity = next%8;
-        mask = 1 << bity;
-    }while(!(segment.bitmap[bitx] & mask) && (next = (next+1)%segment.block_num)>=0);//直到找到符合要求的block块
-    segment.bitmap[bitx] |= mask;
-    segment.next = next + 1;
-    return segment.head + segment.next * BLOCK_SZIE;
-}
-
-void mix_init_free_segment(int fragment_num);
-
-
 /**
- * @brief 将给定的offset添加到bloom filter中
- * 
- * @param offset 重定向得到的offset
- */
-void mix_set_buffer_for_bloom_filter(size_t offset){
+ * @brief 为task获取free_segment中下一个空闲块
+ * 整个流程包含4步
+ * 1. 从free_segment中申请空闲块
+ * 2. 将对应的bitmap设置为dirty
+ * 3. 将key-value保存到hash中
+ * 4. 将key保存到bloom filter中
+ * 需要保证以上为原子操作 
+**/
+uint32_t mix_get_next_free_block(int idx, io_task_t* task){
+    //从free_segment中申请空闲块
+    int bit = mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
+    if(bit == -1){
+        return 0;
+    }
 
-}
+    uint32_t value = bit + idx * meta_data->per_block_num;
+    //将对应的bitmap设置为dirty
+    if(!mix_bitmap_set_bit(bit,meta_data->segments[idx].bitmap)){
+        return 0;
+    }
 
-/**
- * @brief 将给定的offset添加到hash table中
- * 
- * @param offset 重定向得到的offset
- */
-void mix_set_buffer_for_hash_table(size_t offset){
+    //将key-value保存到hash中
+    mix_hash_put(meta_data->hash,task->offset,value);
 
+    //将key保存到bloom filter中
+    mix_counting_bloom_filter_add(meta_data->bloom_filter,task->offset);
+
+    return value + meta_data->offset;
 }
 
 /**
- * @brief 获取指定idx的segment的空闲块 并返回对应的offset
- * 
- * @param idx 
- * @param task 
- * @return size_t 
- */
-size_t mix_get_next_free_segment(int idx, io_task_t* task);
+ * @brief 释放task占用的free_segment中块
+ * 整个流程包含3步
+ * 1. 将key从bloom filter中移除
+ * 2. 将key-value从hash中移除
+ * 3. 将对应的bitmap设置为clean 
+ * 需要保证以上为原子操作 
+**/
+void mix_clear_block(int idx, io_task_t* task){
+    //将key从bloom filter中移除
+    mix_counting_bloom_filter_remove(meta_data->bloom_filter,task->offset);
 
-/**
- * @brief mix_get_buffer的子查询 从bloom_filter中查询指定的offset是否不存在
- * 
- * @param offset 
- * @return size_t 
- */
-size_t mix_get_buffer_by_bloom_filter(size_t offset);
+    //将对应的bitmap设置为clean
+    uint32_t value = mix_hash_get(meta_data->hash, task->offset);
+    if(value == -1){
+        return;
+    }
 
-/**
- * @brief mix_get_buffer的子查询 从hash_table中查询给定的offset所指向的key是否存在
- * 
- * @param offset 
- * @return size_t 
- */
-size_t mix_get_buffer_by_hash_table(size_t offset);
+    int bit = value - meta_data->offset - idx * meta_data->per_block_num;
 
-/**
- * @brief 查询buffer中是否有指定offset的block 如果有则返回其在buffer中的offset 
-   查询分为三个阶段
-   1. 在对应的bloom filter中找 可以直接判断其是否不在buffer中
-   2. 在全局的hash table中找 可以查询其所在的buffer中的偏移
-   3. 将查询到的结果返回
- * 
- * @param offset 需要查询的block的offset
- * @return size_t 查询到的其在buffer中的offset 如果没有找到则返回-1
- */
-size_t mix_get_buffer(int offset){
+    mix_bitmap_clear_bit(bit,meta_data->segments[idx].bitmap);
 
+    return;
 }
+
+io_task_v

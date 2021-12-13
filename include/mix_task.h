@@ -26,7 +26,7 @@ typedef struct io_task{
 } __attribute__((packed)) io_task_t;
 
 // 对任务进行处理后得到的任务数组
-typedef struct {
+typedef struct io_tasks{
     io_task_t* tasks[1024]; //当前的任务集合
     int task_num;           //当前任务的个数
 }io_task_v;

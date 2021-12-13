@@ -4,8 +4,8 @@
 #include <pthread.h>
 
 typedef struct hash_list_node{
-    size_t key;
-    size_t value;
+    uint32_t key;
+    uint32_t value;
     struct hash_list_node* next;
 }hash_list_node_t;
 
@@ -19,7 +19,7 @@ typedef struct hash_node{
 
 typedef struct mix_hash{
     int hash_size;
-    struct hash_node* hash_nodes;
+    hash_node_t* hash_nodes;
 }mix_hash_t;
 
 
@@ -27,17 +27,17 @@ typedef struct mix_hash{
 extern "C"{
 #endif
 
-mix_hash_t* mix_hash_init(int size);
+mix_hash_t* mix_init_hash(int size);
 
-void mix_hash_put(mix_hash_t* hash, int key, size_t value);
+void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value);
 
-size_t mix_hash_get(mix_hash_t* hash, int key);
+uint32_t mix_hash_get(mix_hash_t* hash, uint32_t key);
 
-int mix_hash_has_key(mix_hash_t* hash, int key);
+int mix_hash_has_key(mix_hash_t* hash, uint32_t key);
 
-void mix_hash_delete(mix_hash_t* hash, int key);
+void mix_hash_delete(mix_hash_t* hash, uint32_t key);
 
-void mix_hash_free(mix_hash_t* hash);
+void mix_free_hash(mix_hash_t* hash);
 #ifdef __cplusplus
 }
 #endif

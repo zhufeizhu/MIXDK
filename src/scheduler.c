@@ -70,35 +70,34 @@ static inline void schedule(io_task_t *task)
     if ((size_t)task->offset < nvm_size && task->offset >= 0) {
         // printf("nvm task\n");
         task->type = NVM_TASK;
-        task_v.tasks[task_v.num++] = task;
+        task_v.tasks[task_v.task_num++] = task;
         return;
     }
     
     if ((size_t)task->offset >= nvm_size && (size_t)task->offset < (nvm_size + ssd_size)) {
         //先考虑写
         if(task->opcode & MIX_WRITE){
+            sched_ctx->rw_task_num++;
+            if(sched_ctx->rw_task_num > sched_ctx->rw_threshold){
+                sched_ctx->rw_policy = WRITE_AHEAD;
+            }
             task->offset -= nvm_size;
             if(task->len <= threshold){//将写向ssd的小块 重定向的nvm中
                 task->type = NVM_TASK;
                 task->redirect = 1;
-                task_v.tasks[task_v.num++] = task;
+                task_v.tasks[task_v.task_num++] = task;
             }else{
                 task->type = SSD_TASK;
-                task_v.tasks[task_v.num++] = task;
+                task_v.tasks[task_v.task_num++] = task;
             }
             return;
-        }else if(task->op_code & MIX_READ){
+        }else if(task->opcode & MIX_READ){
             //仅针对小于threshold的读 判断是否需要到buffer中重定向
-            size_t block_num = task->len >> BLOCK_SIZE_BITS;
-            for(int i = 0; i < block_num; i++){
-                size_t offset = mix_get_buffer_by_bloom_filter(task->offset);
-                // 如果offset<0 标明不在buffer中 但是在此之前需要将该task平行放到ssdqueue中进行获取
-                // 目的是保证获取的延迟
-                    if(offset > 0){
-                        task->offset = offset;
-                    }
-                }
+            sched_ctx->rw_task_num--;
+            if(sched_ctx->rw_task_num < (-1 * sched_ctx->rw_threshold)){
+                sched_ctx->rw_policy = READ_AHEAD;
             }
+            size_t block_num = task->len;
             
             //
         }
@@ -112,6 +111,7 @@ static inline void schedule(io_task_t *task)
 static void scheduler(void *arg)
 {
     int len = 0;
+    int i = 0;
     io_task_t* io_task = malloc(TASK_SIZE);
     while (1) {
         //pthread_spin_lock(sched_ctx->schedule_queue_lock);
@@ -121,23 +121,26 @@ static void scheduler(void *arg)
             //printf("empty\n");
             continue;
         }
-
-        switch (schedule(io_task)) {
-            case NVM_TASK:
-            {
-                //printf("post task num is %d\n",task_num++);
-                mix_post_task_to_nvm(io_task);
-                break;
-            };
-            case SSD_TASK:
-            {
-                mix_post_task_to_ssd(io_task);
-                break;
-            };
-            default:{
-                //printf("post error\n");
-                break;
+        schedule(io_task);
+        for(i = 0; i < task_v.task_num; i++){
+            switch(task_v.tasks[i]->type){
+                case NVM_TASK:
+                {
+                    //printf("post task num is %d\n",task_num++);
+                    mix_post_task_to_nvm(io_task);
+                    break;
+                };
+                case SSD_TASK:
+                {
+                    mix_post_task_to_ssd(io_task);
+                    break;
+                };
+                default:{
+                    //printf("post error\n");
+                    break;
+                }
             }
+            
         }
     }
 }
@@ -181,6 +184,7 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current)
 
     sched_ctx->metadata->nvm_size = (size_t)128 * 1024 * 1024 * 1024;  //128 G
     sched_ctx->metadata->ssd_size = (size_t)1024 * 1024 * 1024 * 1024;  //1 T
+    sched_ctx->rw_threshold = 100;
 
     sched_ctx->metadata->size = (sched_ctx->metadata->nvm_size + sched_ctx->metadata->ssd_size) / 2048;//8byte->4kb
     sched_ctx->metadata->ssd_saddr = 0;

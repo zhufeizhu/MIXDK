@@ -24,6 +24,8 @@ int mix_bitmap_test_bit(int nr, mix_bitmap_t* bitmap);
 
 int mix_bitmap_free(mix_bitmap_t* bitmap);
 
+int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap);
+
 //couting bitmap 用在counting bloom filter中 
 // reference from https://github.com/bitly/dablooms
 int mix_counting_bitmap_increment(mix_bitmap_t* bitmap, unsigned int index, long offset);

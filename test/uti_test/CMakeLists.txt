@@ -3,7 +3,7 @@ project(my_project)
 
 # GoogleTest requires at least C++11
 set(CMAKE_CXX_STANDARD 14)
-set(ROOT_PATH /zhuqs/zhuqs/mixdk)
+set(ROOT_PATH /Users/zhuqs/workspace/mixdk)
 
 include(FetchContent)
 FetchContent_Declare(

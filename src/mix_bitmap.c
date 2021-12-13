@@ -42,7 +42,7 @@ int mix_bitmap_free(mix_bitmap_t* bitmap){
  * @param bitmap 
  * @return size_t bitmap的bit位
  */
-inline int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap){
+int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap){
     int next_zero_bit = bitmap->next_bit;
     if(mix_bitmap_test_bit(next_zero_bit,bitmap)){
         if(mix_bitmap_set_bit(next_zero_bit,bitmap)){

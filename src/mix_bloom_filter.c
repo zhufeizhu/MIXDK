@@ -135,12 +135,12 @@ static void hash_func(mix_counting_bloom_filter_t* bloom_filter, int key, __uint
     }
 }
 
-mix_counting_bloom_filter_t* mix_new_counting_bloom_filter(unsigned int capacity, double error_rate){
+mix_counting_bloom_filter_t* mix_init_counting_bloom_filter(unsigned int capacity, double error_rate){
     mix_counting_bloom_filter_t* bloom_filter = NULL;
     bloom_filter = malloc(sizeof(mix_counting_bloom_filter_t));
 
     if(bloom_filter == NULL){
-        mix_log("mix_new_counting_bloom_filter","malloc for bloom filter failed");
+        mix_log("mix_init_counting_bloom_filter","malloc for bloom filter failed");
         return NULL;
     }
 
@@ -169,7 +169,7 @@ int mix_free_counting_bloom_filter(mix_counting_bloom_filter_t* bloom_filter){
     return 0;
 }
 
-int mix_counting_bloom_filter_add(mix_counting_bloom_filter_t* bloom_filter, int key){
+int mix_counting_bloom_filter_add(mix_counting_bloom_filter_t* bloom_filter, uint32_t key){
     unsigned int index, i, offset;
     unsigned int *hashes = bloom_filter->hashes;
 
@@ -185,7 +185,7 @@ int mix_counting_bloom_filter_add(mix_counting_bloom_filter_t* bloom_filter, int
     return 0;
 }
 
-int mix_counting_bloom_filter_remove(mix_counting_bloom_filter_t* bloom_filter,int key){
+int mix_counting_bloom_filter_remove(mix_counting_bloom_filter_t* bloom_filter,uint32_t key){
     unsigned int index, i, offset;
     unsigned int *hashes = bloom_filter->hashes;
 
@@ -209,7 +209,7 @@ int mix_counting_bloom_filter_remove(mix_counting_bloom_filter_t* bloom_filter,i
  * @param len s的长度
  * @return int 0:表示一定不在 1:表示可能在
  */
-int mix_counting_bloom_filter_test(mix_counting_bloom_filter_t* bloom_filter, int key){
+int mix_counting_bloom_filter_test(mix_counting_bloom_filter_t* bloom_filter, uint32_t key){
     unsigned int index, i, offset;
     unsigned int* hashes = bloom_filter->hashes;
 
