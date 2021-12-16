@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <string.h>
+#include <stdint.h>
 
 static unsigned long crc32_tab[] = {
     0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,
@@ -76,7 +77,7 @@ static unsigned long crc32(const unsigned char *s, unsigned int len)
   return crc32val;
 }
 
-static uint32_t mix_hash_hash(uint32_t int_key,int hash_size){
+static int mix_hash_hash(uint32_t int_key,int hash_size){
     char keystring[20];
     memset(keystring,'0',20);
     sprintf(keystring,"%d",int_key);
@@ -165,8 +166,8 @@ static inline void mix_hahs_node_put(hash_list_node_t* node){
 void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value){
     int hash_key = mix_hash_hash(key,hash->hash_size);
     hash_node_t* node = &(hash->hash_nodes[hash_key]);
-
     hash_list_node_t* new_node = mix_hash_node_get(key,value);
+    
     pthread_rwlock_wrlock(node->rw_lock);
     new_node->next = node->list;
     node->list = new_node;
@@ -174,8 +175,8 @@ void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value){
     pthread_rwlock_unlock(node->rw_lock);
 }
 
-uint32_t mix_hash_get(mix_hash_t* hash, uint32_t key){
-    uint32_t offset = -1;
+int mix_hash_get(mix_hash_t* hash, uint32_t key){
+    int offset = -1;
     uint32_t hash_key = mix_hash_hash(key,hash->hash_size);
     
     hash_node_t node = hash->hash_nodes[hash_key];

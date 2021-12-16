@@ -18,9 +18,6 @@ int mixdk_init(){
 }
 
 size_t mixdk_write(void* src, size_t len, size_t offset, size_t flags, int idx){
-    assert(src != NULL);
-    assert(len > 0 && offset >=0);
-
     io_task_t* task = malloc(sizeof(io_task_t));
     task->buf = src;
     task->len = len;
@@ -43,9 +40,6 @@ size_t mixdk_write(void* src, size_t len, size_t offset, size_t flags, int idx){
 }
 
 size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx){
-    assert(dst != NULL);
-    assert(len > 0 && offset >=0);
-
     io_task_t* task = malloc(sizeof(io_task_t));
     task->buf = dst;
     task->len = len;

@@ -73,16 +73,16 @@ static void mix_submit_to_ssd(void* arg){
 }
 
 ssd_info_t* mix_init_ssd_queue(unsigned int size, unsigned int esize){
-    ssd_info_t* ssd_info = mix_ssd_init();
-    
-    if(ssd_info == NULL)
+    ssd_info_t* ssd_info = NULL;
+     
+    pthread_t pid = 0;
+    if((ssd_info = mix_ssd_init())== NULL)
     {
         return NULL;
     }
     
     ssd_queue = mix_queue_init(size,esize);
-    
-    pthread_t pid;
+
     if(pthread_create(&pid,NULL,(void*)mix_submit_to_ssd,NULL)){
         printf("create ssd queue failed\n");
         free(ssd_info);
@@ -97,7 +97,6 @@ ssd_info_t* mix_init_ssd_queue(unsigned int size, unsigned int esize){
 **/
 
 int mix_post_task_to_ssd(io_task_t* task){
-    assert(task != NULL);
     int l = 0;
     while(l == 0){
         l = mix_enqueue(ssd_queue,task,1);

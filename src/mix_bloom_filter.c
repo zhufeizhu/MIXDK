@@ -170,8 +170,8 @@ int mix_free_counting_bloom_filter(mix_counting_bloom_filter_t* bloom_filter){
 }
 
 int mix_counting_bloom_filter_add(mix_counting_bloom_filter_t* bloom_filter, uint32_t key){
-    unsigned int index, i, offset;
-    unsigned int *hashes = bloom_filter->hashes;
+    uint32_t index, i, offset;
+    uint32_t *hashes = bloom_filter->hashes;
 
     hash_func(bloom_filter,key,hashes);
 
@@ -186,8 +186,8 @@ int mix_counting_bloom_filter_add(mix_counting_bloom_filter_t* bloom_filter, uin
 }
 
 int mix_counting_bloom_filter_remove(mix_counting_bloom_filter_t* bloom_filter,uint32_t key){
-    unsigned int index, i, offset;
-    unsigned int *hashes = bloom_filter->hashes;
+    uint32_t index, i, offset;
+    uint32_t *hashes = bloom_filter->hashes;
 
     hash_func(bloom_filter,key,hashes);
 
@@ -210,8 +210,8 @@ int mix_counting_bloom_filter_remove(mix_counting_bloom_filter_t* bloom_filter,u
  * @return int 0:表示一定不在 1:表示可能在
  */
 int mix_counting_bloom_filter_test(mix_counting_bloom_filter_t* bloom_filter, uint32_t key){
-    unsigned int index, i, offset;
-    unsigned int* hashes = bloom_filter->hashes;
+    uint32_t index, i, offset;
+    uint32_t* hashes = bloom_filter->hashes;
 
     hash_func(bloom_filter, key, hashes);
 

@@ -4,7 +4,7 @@ aux_source_directory(. SRC_LIST)
 
 include_directories(../include)
 
-add_definitions(-Wall -g -msse2)
+add_definitions(-Wall -g -msse2) #支持pmdk指令
 
 add_executable(mixdk ${SRC_LIST})
 

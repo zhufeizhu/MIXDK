@@ -1,6 +1,7 @@
 #ifndef MIX_BITMAP_H
 #define MIX_BITMAP_H
 #include <unistd.h>
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C"{
@@ -11,6 +12,7 @@ typedef struct{
     int bytes;
     int next_bit;
     size_t* nvm_offset; //用来记录在nvm中的偏移 在启动时使用mmap映射到内存中 暂时不使用
+    pthread_rwlock_t* rwlock;
 }mix_bitmap_t;
 
 //常规的bitmap 用在记录fragment中的block是否被使用

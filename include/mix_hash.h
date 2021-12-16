@@ -31,7 +31,7 @@ mix_hash_t* mix_init_hash(int size);
 
 void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value);
 
-uint32_t mix_hash_get(mix_hash_t* hash, uint32_t key);
+int mix_hash_get(mix_hash_t* hash, uint32_t key);
 
 int mix_hash_has_key(mix_hash_t* hash, uint32_t key);
 

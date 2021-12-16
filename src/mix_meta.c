@@ -10,7 +10,7 @@ static mix_metadata_t* meta_data;
  * @brief 申请并初始化metadata 包括全局的hash 全局的bloom_filter 全局的free_segment等
  * 
 **/
-bool mix_init_metadata(uint32_t offset,uint32_t block_num){
+bool mix_init_metadata(uint32_t block_num){
     meta_data = malloc(sizeof(mix_metadata_t));
     if(meta_data == NULL){
         mix_log("mix_init_metadata","malloc for metadata failed");
@@ -19,7 +19,6 @@ bool mix_init_metadata(uint32_t offset,uint32_t block_num){
 
     meta_data->block_num = block_num;
     meta_data->size = block_num * BLOCK_SIZE;
-    meta_data->offset = offset;
     meta_data->per_block_num = block_num / SEGMENT_NUM;
     meta_data->bloom_filter = mix_init_counting_bloom_filter(block_num,0.01);
     if(meta_data->bloom_filter == NULL){
@@ -33,7 +32,7 @@ bool mix_init_metadata(uint32_t offset,uint32_t block_num){
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for(int i = 0; i < SEGMENT_NUM; i++){
-        if(!mix_init_free_segment(&(meta_data->segments[i]),offset + i * per_segment_size, per_segment_size)){
+        if(!mix_init_free_segment(&(meta_data->segments[i]), per_segment_size)){
             mix_log("mix_init_metadata","init free segment faield");
             return false;
         }
@@ -46,12 +45,11 @@ bool mix_init_metadata(uint32_t offset,uint32_t block_num){
  * 
  * @param size 每个segment的大小
  */
-bool mix_init_free_segment(free_segment_t* segment, uint32_t offset, uint32_t size){
+bool mix_init_free_segment(free_segment_t* segment, uint32_t size){
     if(segment == NULL)  return false;
     segment->bitmap = mix_bitmap_init(size/BLOCK_SIZE);
     segment->block_num = size / BLOCK_SIZE;
     segment->size = size;
-    segment->head = offset;
     return true;
 };
 
@@ -74,7 +72,7 @@ bool mix_write_redirect_block(int idx, uint32_t offset, int bit){
     uint32_t value = bit + idx * meta_data->per_block_num;
     //将对应的bitmap设置为dirty
     if(!mix_bitmap_set_bit(bit,meta_data->segments[idx].bitmap)){
-        return 0;
+        return false;
     }
 
     //将key-value保存到hash中
@@ -82,6 +80,12 @@ bool mix_write_redirect_block(int idx, uint32_t offset, int bit){
 
     //将key保存到bloom filter中
     mix_counting_bloom_filter_add(meta_data->bloom_filter,offset);
+    
+    meta_data->segments[idx].used_block_num++;
+    if(meta_data->segments[idx].used_block_num == meta_data->segments[idx].block_num){
+        meta_data->segments[idx].migration = true;
+    }
+    return true;
 }
 
 /**
@@ -92,28 +96,63 @@ bool mix_write_redirect_block(int idx, uint32_t offset, int bit){
  * 3. 将对应的bitmap设置为clean 
  * 需要保证以上为原子操作 
 **/
-void mix_clear_block(int idx, io_task_t* task){
-    //将key从bloom filter中移除
-    mix_counting_bloom_filter_remove(meta_data->bloom_filter,task->offset);
+void mix_clear_blocks(io_task_t* task){
+    for(int i = 0; i < task->len; i++){
+        // 查询是否在bloom_filter中
+        if(!mix_counting_bloom_filter_test(meta_data->bloom_filter,task->offset + i)){
+            continue;
+        }
 
-    //将对应的bitmap设置为clean
-    uint32_t value = mix_hash_get(meta_data->hash, task->offset);
-    if(value == -1){
-        return;
+        // 查询是否在hash中
+        int value = mix_hash_get(meta_data->hash, task->offset + i);
+        if(value == -1){
+            continue;
+        }
+
+        //将key从bloom filter中移除
+        mix_counting_bloom_filter_remove(meta_data->bloom_filter,task->offset + i);
+
+        mix_hash_delete(meta_data->hash,task->offset + i);
+
+        //将对应的bitmap设置为clean
+        int idx = value / meta_data->per_block_num;
+        int bit = value % meta_data->per_block_num;
+        mix_bitmap_clear_bit(bit,meta_data->segments[idx].bitmap);
+        meta_data->segments[idx].used_block_num--;
     }
-
-    int bit = value - meta_data->offset - idx * meta_data->per_block_num;
-
-    mix_bitmap_clear_bit(bit,meta_data->segments[idx].bitmap);
-    return;
 }
 
 /**
- * @brief 根据bloom_filter来判断是否一定不存在
+ * @brief 判断offset指代的block是否在buffer中 
  * 
- * @return true 表示一定不在
- *         false 表示可能在
+ * @return 如果在则返回对应的偏移 如果不在则返回-1
 **/
-bool mix_bloom_filter_test(uint32_t offset){
-    return mix_counting_bloom_filter_test(meta_data->bloom_filter,offset) == 0;
+int mix_buffer_block_test(uint32_t offset){
+    if(!mix_counting_bloom_filter_test(meta_data->bloom_filter,offset)){
+        return -1;
+    }
+
+    int value = mix_hash_get(meta_data->hash,offset);
+    if(value == -1){
+        return -1;
+    }
+
+    int idx = value / meta_data->per_block_num;
+    int bit = value % meta_data->per_block_num;
+    if(!mix_bitmap_test_bit(bit,meta_data->segments[idx].bitmap)){
+        return -1;
+    }
+
+    return value;
+}
+
+/**
+ * @brief 判断当前segment是否还有空闲块
+ * 
+ * @param idx segment的下标
+ * @return true 有空闲块
+ * @return false 无空闲块
+ */
+bool mix_has_free_block(int idx){
+   return meta_data->segments[idx].migration;
 }

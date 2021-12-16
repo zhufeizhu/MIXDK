@@ -2,6 +2,7 @@
 #define MIX_META_H
 
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdbool.h>
 
 #include "mix_bitmap.h"
@@ -14,7 +15,8 @@
 typedef struct free_segment{
     size_t size;    //当前segment的总体的大小
     uint32_t block_num;     //当前segment的block的个数
-    uint32_t head;      //当前segment的起始地址     
+    atomic_int_fast32_t used_block_num; //当前segment被使用的block的个数
+    atomic_bool migration;      //是否正在迁移数据    
     mix_bitmap_t* bitmap;   //描述当前segment的bitmap信息
 }free_segment_t;
 
@@ -28,18 +30,20 @@ typedef struct mix_metadata{
     free_segment_t segments[SEGMENT_NUM];     //四个free_segment
 }mix_metadata_t;
 
-bool mix_init_metadata(uint32_t offset,uint32_t block_num);
+bool mix_init_metadata(uint32_t block_num);
 
-bool mix_init_free_segment(free_segment_t* segment,uint32_t offset, uint32_t block_num);
+bool mix_init_free_segment(free_segment_t* segment, uint32_t block_num);
 
 uint32_t mix_get_next_free_block(int idx);
 
-void mix_clear_block(int idx, io_task_t* task);
+void mix_clear_blocks(io_task_t* task);
 
 int mix_free_free_segment(free_segment_t* segments);
 
-bool mix_bloom_filter_test(uint32_t offset);
+int mix_buffer_block_test(uint32_t offset);
 
 bool mix_write_redirect_block(int idx, uint32_t offset, int bit);
+
+bool mix_has_free_block(int idx);
 
 #endif

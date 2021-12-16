@@ -95,7 +95,7 @@ static inline void __mix_dequeue(mix_queue_t* queue,void* dst, unsigned int len,
 
 mix_queue_t* mix_queue_init(unsigned int size, unsigned int esize){
 	assert(size > 0 && esize > 0);
-	
+
 	mix_queue_t* queue = malloc(sizeof(mix_queue_t));
 	assert(queue != NULL);
 	void* buffer = malloc(size);

@@ -15,12 +15,9 @@
 
 //数据定义区
 static scheduler_ctx_t *sched_ctx = NULL;
-static size_t nvm_size = (size_t)128 * 1024 * 1024 * 1024;  //128 G
-static size_t ssd_size = (size_t)1024 * 1024 * 1024 * 1024; //1T
 static const size_t threshold = 4096;
 
-//最大支持存放1024个task
-static io_task_v task_v;
+static io_task_t* p_task;
 
 int mix_wait_for_task_completed(atomic_bool* flag){
     while(atomic_load(flag) == false){};
@@ -60,65 +57,34 @@ int mix_post_task_to_io(io_task_t *task)
  * @param task 用户传入的io操作
  * @return io_task_t** 对用户传入的io操作的拆分
  */
-static inline void schedule(io_task_t *task)
+static inline io_task_t* schedule(io_task_t *task)
 {
     //当前task的offset在nvm的范围内
-    if ((size_t)task->offset < nvm_size && task->offset >= 0) {
+    if ((size_t)task->offset < sched_ctx->metadata->nvm_size && task->offset >= 0) {
         // printf("nvm task\n");
         task->type = NVM_TASK;
-        task_v.tasks[task_v.task_num++] = *task;
-        return;
+        return NULL;
     }
     
-    if ((size_t)task->offset >= nvm_size && (size_t)task->offset < (nvm_size + ssd_size)) {
+    if ((size_t)task->offset >= sched_ctx->metadata->nvm_size && (size_t)task->offset < (sched_ctx->metadata->nvm_size + sched_ctx->metadata->ssd_size)) {
         if(task->opcode & MIX_WRITE){
-            if(sched_ctx->rw_task_num == sched_ctx->rw_threshold){
-                sched_ctx->rw_policy = WRITE_AHEAD;
-            }else{
-                sched_ctx->rw_task_num++;
-            }
-
-            task->offset -= nvm_size / BLOCK_SIZE;
+            // 写到ssd的请求分成大写和小写
+            // 针对小写 需要将该请求写到 buffer区 同时添加对应的元数据
+            // 针对大写 需要将该请求拆分成一个block大小的请求 用于查询当前block是否在buffer中 如果在的话 清空其对应的元数据 同时并行的将内容写到ssd中
             if(task->len <= threshold){//将写向ssd的小块 重定向的nvm中
-                task->type = NVM_TASK;
-                task->redirect = 1;
-                task_v.tasks[task_v.task_num++] = *task;
+                return NULL;
             }else{
-                //ssd的大写 需要更新元数据 清空metadata中记录的相关ssd的数据信息
-                if(sched_ctx->rw_policy == WRITE_AHEAD){
-                    for(int i = 0; i < task->len; i++){
-                        if(!mix_bloom_filter_test(task->offset))    continue;
-                        task_v.tasks[i].offset = task->offset + i;
-                        task_v.tasks[i].type = CLEAR_TASK;
-                    }
-                    task_v.task_num = task->len;
-                }
+                // ssd的大写 需要清空metadata中记录的相关ssd的数据信息
+                // 这里生成的是删除旧block的元数据任务
+                p_task->len = task->len;
+                p_task->offset = task->offset;
+                p_task->type = CLEAR_TASK;
+                return p_task;
             }
-            return;
         }else if(task->opcode & MIX_READ){
-            //仅针对小于threshold的读 判断是否需要到buffer中重定向
-            
-            if(sched_ctx->rw_task_num == (-1 * sched_ctx->rw_threshold)){
-                sched_ctx->rw_policy = READ_AHEAD;
-            }else{
-                sched_ctx->rw_task_num--;
-            }
-            
-            //将读操作进行拆分 过滤掉一定不在buffer中的 
-            //每个任务需要包含如下的信息
-            //1. 读取的块的块号
-            //2. 读取出来的结果
-            //3. 任务的类型
-            //4. 是否是重定向的任务
-            for(int i = 0; i < task->len; i++){
-                if(!mix_bloom_filter_test(task->offset))    continue;
-                task_v.tasks[i].offset = task->offset + i;
-                task_v.tasks[i].buf = task->buf + i * BLOCK_SIZE;
-                task_v.tasks[i].type = NVM_TASK;
-                task_v.tasks[i].redirect = 1;
-                task_v.task_num++;
-            }
-            //
+            // 读操作直接重定向到nvm中 让nvm队列执行相关的查询操作
+            task->redirect = 1;
+            return NULL;
         }
     }
     //printf("[task offset]:%llu\n [nvm_size]:%llu\n [ssd_size]:%llu\n",(size_t)task->offset,nvm_size,ssd_size);
@@ -137,76 +103,121 @@ static void scheduler(void *arg)
             //printf("empty\n");
             continue;
         }
-        schedule(io_task);
-        //并行执行ssd的大读与大写
-        if(io_task->len > 1 && io_task->type == SSD_TASK){
-            mix_post_task_to_ssd(io_task);
+        io_task_t* new_task = schedule(io_task);
+        // 并发执行大写时删除buffer中元数据的动作
+        if(new_task != NULL && new_task->type == CLEAR_TASK){
+            mix_post_task_to_nvm(new_task);
         }
-        for(i = 0; i < task_v.task_num; i++){
-            switch(task_v.tasks[i].type){
-                case CLEAR_TASK:
-                case NVM_TASK:
-                {
-                    //printf("post task num is %d\n",task_num++);
-                    mix_post_task_to_nvm(io_task);
-                    break;
-                };
-                case SSD_TASK:
-                {
-                    mix_post_task_to_ssd(io_task);
-                    break;
-                };
-                default:{
-                    //printf("post error\n");
-                    break;
-                }
+        
+        switch(io_task->type){
+            case NVM_TASK:
+            {
+                //printf("post task num is %d\n",task_num++);
+                mix_post_task_to_nvm(io_task);
+                break;
+            };
+            case SSD_TASK:
+            {
+                mix_post_task_to_ssd(io_task);
+                break;
+            };
+            default:{
+                //printf("post error\n");
+                break;
             }
-            memset(&(task_v.tasks[i]),0,sizeof(io_task_t));
         }
-        task_v.task_num = 0;
     }
 }
 
+/**
+ * @brief scheduler初始化函数 包括
+ * 
+ * @param size 
+ * @param esize 
+ * @param max_current 
+ * @return int 
+ */
 int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current)
 {
-    pthread_t scheduler_thread;
-    sched_ctx = malloc(sizeof(scheduler_ctx_t));
+    pthread_t scheduler_thread = 0;
+    ssd_info_t* ssd_info = NULL;
+    nvm_info_t* nvm_info = NULL;
 
-    sched_ctx->submit_queue = mix_queue_init(size, esize);
+    sched_ctx = malloc(sizeof(scheduler_ctx_t));
+    if (sched_ctx == NULL) {
+        mix_log("mix_init_scheduler","malloc for sched_ctx failed");
+        return -1;
+    }
+
     sched_ctx->max_current = max_current;
+    sched_ctx->submit_queue = mix_queue_init(size, esize);
+    if (sched_ctx->submit_queue == NULL) {
+        mix_log("mix_init_scheduler","mix queue init failed");
+        return -1;
+    }
+
     sched_ctx->completation_conds = malloc(sizeof(pthread_cond_t *) * max_current);
+    if (sched_ctx->completation_conds == NULL) {
+        return -1;
+    }
     for (int i = 0; i < max_current; i++) {
         sched_ctx->completation_conds[i] = malloc(sizeof(pthread_cond_t));
+        if (sched_ctx->completation_conds[i] == NULL) {
+            return -1;
+        }
         pthread_cond_init(sched_ctx->completation_conds[i],NULL);
     }
 
     sched_ctx->ctx_mutex = malloc(sizeof(pthread_mutex_t*) * max_current);
-    for(int i = 0; i < max_current; i++){
+    if (sched_ctx->ctx_mutex == NULL) {
+        return -1;
+    }
+    for (int i = 0; i < max_current; i++) {
         sched_ctx->ctx_mutex[i] = malloc(sizeof(pthread_mutex_t));
+        if (sched_ctx->ctx_mutex[i] == NULL) {
+            return -1;
+        }
         pthread_mutex_init(sched_ctx->ctx_mutex[i],NULL);
     }
 
     sched_ctx->bitmap_lock = malloc(sizeof(pthread_mutex_t));
+    if (sched_ctx->bitmap_lock == NULL) {
+        return -1;
+    }
     pthread_mutex_init(sched_ctx->bitmap_lock,NULL);
+
     sched_ctx->schedule_queue_lock = malloc(sizeof(pthread_mutex_t));
+    if (sched_ctx->schedule_queue_lock == NULL) {
+        return -1;
+    }
     pthread_spin_init(sched_ctx->schedule_queue_lock, 1);
 
     sched_ctx->bitmap_lock = malloc(max_current / 8);
+    if (sched_ctx->bitmap_lock == NULL) {
+        return -1;
+    }
     memset(sched_ctx->bitmap_lock, 0, max_current / 8);
 
-    ssd_info_t* ssd_info = mix_init_ssd_queue(size,esize);
-    assert(ssd_info != NULL);
-    nvm_info_t* nvm_info = mix_init_nvm_queue(size,esize);
-    assert(nvm_info != NULL);
+    ssd_info = mix_init_ssd_queue(size,esize);
+    if (ssd_info == NULL) {
+        return -1;
+    }
+
+    nvm_info = mix_init_nvm_queue(size,esize);
+    if (nvm_info == NULL) {
+        return -1;
+    }
+
     sched_ctx->ssd_info = ssd_info;
     sched_ctx->nvm_info = nvm_info;
 
     sched_ctx->metadata = malloc(sizeof(scheduler_metadata_t));
-    assert(sched_ctx->metadata != NULL);
+    if(sched_ctx->metadata == NULL) {
+        return -1;
+    }
 
-    sched_ctx->metadata->nvm_size = (size_t)128 * 1024 * 1024 * 1024;  //128 G
-    sched_ctx->metadata->ssd_size = (size_t)1024 * 1024 * 1024 * 1024;  //1 T
-    sched_ctx->rw_threshold = 100;
+    sched_ctx->metadata->nvm_size = nvm_info->nvm_capacity; //nvm的大小
+    sched_ctx->metadata->ssd_size = ssd_info->ssd_capacity; //ssd的大小
 
     sched_ctx->metadata->size = (sched_ctx->metadata->nvm_size + sched_ctx->metadata->ssd_size) / 2048;//8byte->4kb
     sched_ctx->metadata->ssd_saddr = 0;

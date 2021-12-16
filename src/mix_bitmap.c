@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "mix_log.h"
 
@@ -19,11 +20,19 @@ mix_bitmap_t* mix_bitmap_init(int bytes){
     bitmap->nvm_offset = 0;
     bitmap->array = malloc(bytes * sizeof(char));
     if(bitmap->array == NULL){
-        mix_log("mi_bitmap_init","malloc for bitmap->array failed");
+        mix_log("mix_bitmap_init","malloc for bitmap->array failed");
         free(bitmap);
         return NULL;
     }
     memset(bitmap->array,0,bytes * sizeof(char));
+    bitmap->rwlock = malloc(sizeof(pthread_rwlock_t));
+    if(bitmap->rwlock == NULL){
+        mix_log("mix_bitmap_init","malloc for rwlock failed");
+        free(bitmap->array);
+        free(bitmap);
+        return NULL;
+    }
+    pthread_rwlock_init(bitmap->rwlock,NULL);
     return bitmap;
 }
 
@@ -43,13 +52,16 @@ int mix_bitmap_free(mix_bitmap_t* bitmap){
  * @return size_t bitmap的bit位
  */
 int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap){
+    pthread_rwlock_wrlock(bitmap->rwlock);
     int next_zero_bit = bitmap->next_bit;
     if(mix_bitmap_test_bit(next_zero_bit,bitmap)){
         if(mix_bitmap_set_bit(next_zero_bit,bitmap)){
             bitmap->next_bit = (next_zero_bit + 1)/(bitmap->bytes * BITS_PER_BYTE);
+            pthread_rwlock_unlock(bitmap->rwlock);
             return next_zero_bit;
         }else{
             mix_log("mix_bitmap_next_zero_bit","set bit failed");
+            pthread_rwlock_unlock(bitmap->rwlock);
             return -1;
         }
     }else{
@@ -58,15 +70,18 @@ int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap){
         }
         if(mix_bitmap_set_bit(next_zero_bit,bitmap)){
             bitmap->next_bit = (next_zero_bit + 1)/(bitmap->bytes * BITS_PER_BYTE);
+            pthread_rwlock_unlock(bitmap->rwlock);
             return next_zero_bit;
         }else{
             mix_log("mix_bitmap_next_zero_bit","set bit failed");
+            pthread_rwlock_unlock(bitmap->rwlock);
             return -1;
         }
     }
 }
 
 int mix_bitmap_set_bit(int nr, mix_bitmap_t* bitmap){
+    pthread_rwlock_wrlock(bitmap->rwlock);
     char mask,retval;
     char* addr = bitmap->array;
   
@@ -74,25 +89,38 @@ int mix_bitmap_set_bit(int nr, mix_bitmap_t* bitmap){
     mask = 1 << (nr & 0x07);           //得char内的offset
     retval = (mask & *addr) != 0;    
     *addr |= mask;  
+    pthread_rwlock_unlock(bitmap->rwlock);
     return (int)retval;                   //返回置数值
 }
 
 int mix_bitmap_clear_bit(int nr, mix_bitmap_t* bitmap){
+    pthread_rwlock_wrlock(bitmap->rwlock);
     char mask, retval;  
     char* addr = bitmap->array;
     addr += nr >> 3;  
     mask = 1 << (nr & 0x07);  
     retval = (mask & *addr) != 0;  
     *addr &= ~mask;  
+    pthread_rwlock_unlock(bitmap->rwlock);
     return (int)retval;
 }
 
+/**
+ * @brief nr指定的bit位的值
+ * 
+ * @param nr 要test的bit位
+ * @param bitmap 要test的bitmap
+ * @return int bit位的值
+ */
 int mix_bitmap_test_bit(int nr, mix_bitmap_t* bitmap){
+    pthread_rwlock_rdlock(bitmap->rwlock);
     char mask;
     char* addr = bitmap->array;  
     addr += nr >> 3;  
     mask = 1 << (nr & 0x07);
-    return (int)((mask & *addr) != 0);  
+    int retval = (int)((mask & *addr) != 0);
+    pthread_rwlock_rdlock(bitmap->rwlock);
+    return retval;
 }
 
 /**
@@ -104,9 +132,10 @@ int mix_bitmap_test_bit(int nr, mix_bitmap_t* bitmap){
  * @return int 
  */
 int mix_counting_bitmap_increment(mix_bitmap_t* bitmap, unsigned int index, long offset){
+    pthread_rwlock_wrlock(bitmap->rwlock);
     long access = index / 2 + offset;
-    __uint8_t temp;
-    __uint8_t n = bitmap->array[access];
+    uint8_t temp;
+    uint8_t n = bitmap->array[access];
 
     if (index % 2 != 0) {
         temp = (n & 0x0f);
@@ -118,17 +147,20 @@ int mix_counting_bitmap_increment(mix_bitmap_t* bitmap, unsigned int index, long
     
     if (temp == 0x0f) {
         mix_log("mix_counting_bitmap_increment","4 bit int overflow");
+        pthread_rwlock_unlock(bitmap->rwlock);
         return -1;
     }
 
     bitmap->array[access] = n;
+    pthread_rwlock_unlock(bitmap->rwlock);
     return 0;
 }
 
 int mix_counting_bitmap_decrement(mix_bitmap_t* bitmap, unsigned int index, long offset){
+    pthread_rwlock_wrlock(bitmap->rwlock);
     long access = index / 2 + offset;
-    __uint8_t temp;
-    __uint8_t n = bitmap->array[access];
+    uint8_t temp;
+    uint8_t n = bitmap->array[access];
 
     if (index % 2 != 0) {
         temp = (n & 0x0f);
@@ -140,19 +172,24 @@ int mix_counting_bitmap_decrement(mix_bitmap_t* bitmap, unsigned int index, long
     
     if (temp == 0x00) {
         mix_log("mix_counting_bitmap_decrement","decrementing zero");
+        pthread_rwlock_unlock(bitmap->rwlock);
         return -1;
     }
     
     bitmap->array[access] = n;
+    pthread_rwlock_unlock(bitmap->rwlock);
     return 0;
 }
 
 int mix_counting_bitmap_check(mix_bitmap_t* bitmap, unsigned int index, long offset){
+    pthread_rwlock_rdlock(bitmap->rwlock);
     long access = index / 2 + offset;
-
+    int retval = 0;
     if(index % 2 != 0){
-        return bitmap->array[access] & 0x0f;
+        retval = bitmap->array[access] & 0x0f;
     }else{
-        return bitmap->array[access] & 0xf0;
+        retval = bitmap->array[access] & 0xf0;
     }
+    pthread_rwlock_unlock(bitmap->rwlock);
+    return retval;
 }
