@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 #include "nvm.h"
-#include "mix_hash.h"
+#include "mix_meta.h"
 
 
 #define NVM_QUEUE_NUM 4
@@ -24,6 +24,10 @@ static inline size_t mix_read_from_nvm(void* dst, size_t len, size_t offset,size
     return mix_nvm_read(dst,len,offset,flags);
 }
 
+static inline size_t mix_read_from_buffer(void* dst, size_t len, size_t offset, size_t flags){
+    return mix_buffer_read(dst,len,offset,flags);
+}
+
 /**
  * @param src:写入的内容
  * @param len:写入的长度
@@ -31,6 +35,10 @@ static inline size_t mix_read_from_nvm(void* dst, size_t len, size_t offset,size
 **/
 static inline size_t mix_write_to_nvm(void* src, size_t len, size_t offset,size_t flags){
     return mix_nvm_write(src,len,offset,flags);
+}
+
+static inline size_t mix_write_to_buffer(void* src, size_t len, size_t offset, size_t flags){
+    return mix_buffer_write(src,len,offset,flags);
 }
 
 static inline void mix_nvm_task_completed(io_task_t* task){
@@ -46,10 +54,6 @@ atomic_int mix_get_completed_nvm_task_num(){
 
 static atomic_int task_num = 0;
 
-<<<<<<< Updated upstream
-=======
-
->>>>>>> Stashed changes
 static void mix_submit_to_nvm(void* arg){
     int i = *(int*)arg;
     //printf("init nvm queue %d\n",i);
@@ -62,32 +66,42 @@ static void mix_submit_to_nvm(void* arg){
         if (len == 0) {
             continue;
         }
-        
-        size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
 
-        switch (op_code) {
-            case MIX_READ:
-            {
-                ret = mix_read_from_nvm(task->buf,task->len,task->offset,task->opcode);
-                break;
-            };
-            case MIX_WRITE:
-            {
-                if (task->redirect == 1){
-                    //需要重新确定下写的位置
-                    task->offset = get_next_free_segment(i,task);
+        //清空对应的元数据信息
+        if(task->type == CLEAR_TASK){
+            mix_clear_block(i,task);
+        }else{
+            size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
+            switch (op_code) {
+                case MIX_READ:
+                {
+                    if(task->redirect == 1){
+                        ret = mix_read_from_buffer(task->buf,task->len,task->offset,task->opcode);
+                    }else{
+                        ret = mix_read_from_nvm(task->buf,task->len,task->offset,task->opcode);
+                    }
+                    break;
+                };
+                case MIX_WRITE:
+                {
+                    if (task->redirect == 1){
+                        //需要重新确定下写的位置
+                        uint32_t bit = mix_get_next_free_block(i);
+                        ret = mix_write_to_buffer(task->buf,task->len,bit,task->opcode);
+                        mix_write_redirect_block(i,task->offset,bit);
+                    }
+
+                    ret = mix_write_to_nvm(task->buf,task->len,task->offset,task->opcode);
+                    break;
+                };
+                default:{
+                    ret = 0;
+                    break;
                 }
-
-                ret = mix_write_to_nvm(task->buf,task->len,task->offset,task->opcode);
-                break;
-            };
-            default:{
-                ret = 0;
-                break;
+                task->ret = ret;
+                mix_nvm_task_completed(task);
             }
         }
-        task->ret = ret;
-        mix_nvm_task_completed(task);
     }
     return;
 }
@@ -104,8 +118,6 @@ nvm_info_t* mix_init_nvm_queue(unsigned int size, unsigned int esize){
     if(nvm_queue == NULL){
         perror("alloc memory for mix queue failed\n");
     }
-
-    mix_hash = mix_hash_init();
 
     for(int i = 0; i < NVM_QUEUE_NUM; i++){
         nvm_queue[i] = mix_queue_init(size,esize);

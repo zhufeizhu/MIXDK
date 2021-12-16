@@ -3,17 +3,32 @@
 
 #include "mixdk.h"
 typedef struct nvm_info{
-    void* nvm_buffer; //nvm的内存
+    void* nvm_addr;     //nvm的内存起始地址
     size_t block_num; 
     size_t nvm_capacity;
-    int block_size;    
-    int queue_num;
+    int block_size;
 }nvm_info_t;
+
+typedef struct buffer_info{
+    void* buffer_addr;      //buffer的内存起始地址
+    size_t block_num;
+    size_t buffer_capacity;
+}buffer_info_t;
+
+typedef struct buffer_block{
+    void* src;  //buffer的地址
+    size_t timestamp;   //时间戳
+    size_t 
+}buffer_block_t;
 
 nvm_info_t* mix_nvm_init();
 
 size_t mix_nvm_read(void*,size_t, size_t,size_t);
 
 size_t mix_nvm_write(void*,size_t,size_t,size_t);
+
+size_t mix_buffer_write(void*, size_t, size_t, size_t);
+
+size_t mix_buffer_read(void*, size_t, size_t, size_t);
 
 #endif

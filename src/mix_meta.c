@@ -56,21 +56,21 @@ bool mix_init_free_segment(free_segment_t* segment, uint32_t offset, uint32_t si
 };
 
 /**
- * @brief 为task获取free_segment中下一个空闲块
- * 整个流程包含4步
- * 1. 从free_segment中申请空闲块
- * 2. 将对应的bitmap设置为dirty
- * 3. 将key-value保存到hash中
- * 4. 将key保存到bloom filter中
- * 需要保证以上为原子操作 
+ * @brief 为task获取free_segment中下一个空闲块 返回的值代表该块在buffer中的偏移
 **/
-uint32_t mix_get_next_free_block(int idx, io_task_t* task){
+uint32_t mix_get_next_free_block(int idx){
     //从free_segment中申请空闲块
-    int bit = mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
-    if(bit == -1){
-        return 0;
-    }
+    return idx * meta_data->per_block_num + mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
+}
 
+/**
+ * 整个流程包含3步来设置元数据
+ * 1. 将对应的bitmap设置为dirty
+ * 2. 将key-value保存到hash中
+ * 3. 将key保存到bloom filter中
+ * 通过自描述来保证原子性
+**/
+bool mix_write_redirect_block(int idx, uint32_t offset, int bit){
     uint32_t value = bit + idx * meta_data->per_block_num;
     //将对应的bitmap设置为dirty
     if(!mix_bitmap_set_bit(bit,meta_data->segments[idx].bitmap)){
@@ -78,12 +78,10 @@ uint32_t mix_get_next_free_block(int idx, io_task_t* task){
     }
 
     //将key-value保存到hash中
-    mix_hash_put(meta_data->hash,task->offset,value);
+    mix_hash_put(meta_data->hash,offset,value);
 
     //将key保存到bloom filter中
-    mix_counting_bloom_filter_add(meta_data->bloom_filter,task->offset);
-
-    return value + meta_data->offset;
+    mix_counting_bloom_filter_add(meta_data->bloom_filter,offset);
 }
 
 /**
@@ -107,8 +105,15 @@ void mix_clear_block(int idx, io_task_t* task){
     int bit = value - meta_data->offset - idx * meta_data->per_block_num;
 
     mix_bitmap_clear_bit(bit,meta_data->segments[idx].bitmap);
-
     return;
 }
 
-io_task_v
+/**
+ * @brief 根据bloom_filter来判断是否一定不存在
+ * 
+ * @return true 表示一定不在
+ *         false 表示可能在
+**/
+bool mix_bloom_filter_test(uint32_t offset){
+    return mix_counting_bloom_filter_test(meta_data->bloom_filter,offset) == 0;
+}

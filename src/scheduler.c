@@ -13,18 +13,14 @@
 #include "nvm_queue.h"
 #include "mix_meta.h"
 
-#define NVM_TASK 1
-#define SSD_TASK 2
-#define REDIRECT_NVM_TASK 3
-#define UNDEF_TASK 4
-
-
 //数据定义区
 static scheduler_ctx_t *sched_ctx = NULL;
 static size_t nvm_size = (size_t)128 * 1024 * 1024 * 1024;  //128 G
 static size_t ssd_size = (size_t)1024 * 1024 * 1024 * 1024; //1T
 static const size_t threshold = 4096;
-static io_task_v task_v;//最大支持存放1024个task
+
+//最大支持存放1024个task
+static io_task_v task_v;
 
 int mix_wait_for_task_completed(atomic_bool* flag){
     while(atomic_load(flag) == false){};
@@ -70,42 +66,62 @@ static inline void schedule(io_task_t *task)
     if ((size_t)task->offset < nvm_size && task->offset >= 0) {
         // printf("nvm task\n");
         task->type = NVM_TASK;
-        task_v.tasks[task_v.task_num++] = task;
+        task_v.tasks[task_v.task_num++] = *task;
         return;
     }
     
     if ((size_t)task->offset >= nvm_size && (size_t)task->offset < (nvm_size + ssd_size)) {
-        //先考虑写
         if(task->opcode & MIX_WRITE){
-            sched_ctx->rw_task_num++;
-            if(sched_ctx->rw_task_num > sched_ctx->rw_threshold){
+            if(sched_ctx->rw_task_num == sched_ctx->rw_threshold){
                 sched_ctx->rw_policy = WRITE_AHEAD;
+            }else{
+                sched_ctx->rw_task_num++;
             }
-            task->offset -= nvm_size;
+
+            task->offset -= nvm_size / BLOCK_SIZE;
             if(task->len <= threshold){//将写向ssd的小块 重定向的nvm中
                 task->type = NVM_TASK;
                 task->redirect = 1;
-                task_v.tasks[task_v.task_num++] = task;
+                task_v.tasks[task_v.task_num++] = *task;
             }else{
-                task->type = SSD_TASK;
-                task_v.tasks[task_v.task_num++] = task;
+                //ssd的大写 需要更新元数据 清空metadata中记录的相关ssd的数据信息
+                if(sched_ctx->rw_policy == WRITE_AHEAD){
+                    for(int i = 0; i < task->len; i++){
+                        if(!mix_bloom_filter_test(task->offset))    continue;
+                        task_v.tasks[i].offset = task->offset + i;
+                        task_v.tasks[i].type = CLEAR_TASK;
+                    }
+                    task_v.task_num = task->len;
+                }
             }
             return;
         }else if(task->opcode & MIX_READ){
             //仅针对小于threshold的读 判断是否需要到buffer中重定向
-            sched_ctx->rw_task_num--;
-            if(sched_ctx->rw_task_num < (-1 * sched_ctx->rw_threshold)){
-                sched_ctx->rw_policy = READ_AHEAD;
-            }
-            size_t block_num = task->len;
             
+            if(sched_ctx->rw_task_num == (-1 * sched_ctx->rw_threshold)){
+                sched_ctx->rw_policy = READ_AHEAD;
+            }else{
+                sched_ctx->rw_task_num--;
+            }
+            
+            //将读操作进行拆分 过滤掉一定不在buffer中的 
+            //每个任务需要包含如下的信息
+            //1. 读取的块的块号
+            //2. 读取出来的结果
+            //3. 任务的类型
+            //4. 是否是重定向的任务
+            for(int i = 0; i < task->len; i++){
+                if(!mix_bloom_filter_test(task->offset))    continue;
+                task_v.tasks[i].offset = task->offset + i;
+                task_v.tasks[i].buf = task->buf + i * BLOCK_SIZE;
+                task_v.tasks[i].type = NVM_TASK;
+                task_v.tasks[i].redirect = 1;
+                task_v.task_num++;
+            }
             //
         }
     }
-
-
     //printf("[task offset]:%llu\n [nvm_size]:%llu\n [ssd_size]:%llu\n",(size_t)task->offset,nvm_size,ssd_size);
-    return UNDEF_TASK;
 }
 
 static void scheduler(void *arg)
@@ -122,8 +138,13 @@ static void scheduler(void *arg)
             continue;
         }
         schedule(io_task);
+        //并行执行ssd的大读与大写
+        if(io_task->len > 1 && io_task->type == SSD_TASK){
+            mix_post_task_to_ssd(io_task);
+        }
         for(i = 0; i < task_v.task_num; i++){
-            switch(task_v.tasks[i]->type){
+            switch(task_v.tasks[i].type){
+                case CLEAR_TASK:
                 case NVM_TASK:
                 {
                     //printf("post task num is %d\n",task_num++);
@@ -140,8 +161,9 @@ static void scheduler(void *arg)
                     break;
                 }
             }
-            
+            memset(&(task_v.tasks[i]),0,sizeof(io_task_t));
         }
+        task_v.task_num = 0;
     }
 }
 

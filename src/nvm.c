@@ -21,14 +21,16 @@ nvm_info_t* mix_nvm_init(){
     nvm_info->block_num = 32 * 1024 * 1024;
     
     int raw_nvm_fd = open("/dev/pmem0",O_RDWR);
-    nvm_info->nvm_buffer = mmap(NULL,nvm_info->nvm_capacity,PROT_READ|PROT_WRITE,MAP_SHARED,raw_nvm_fd,0);
-    if(nvm_info->nvm_buffer == MAP_FAILED){
+    nvm_info->nvm = mmap(NULL,nvm_info->nvm_capacity,PROT_READ|PROT_WRITE,MAP_SHARED,raw_nvm_fd,0);
+    if(nvm_info->nvm == MAP_FAILED){
         perror("mix_nvm_init");
 
         return NULL;
     }
     return nvm_info;
 }
+
+
 
 static inline void mix_clflush(const void* addr){
     _mm_clflush(addr);
@@ -84,7 +86,7 @@ size_t mix_nvm_read(void* dst, size_t len, size_t offset,size_t flags){
     }
     
     //_mm_lfence();
-    mix_ntstorenx32(dst,nvm_info->nvm_buffer+offset,l);
+    mix_ntstorenx32(dst,nvm_info->nvm+offset,l);
     // printf("[len] %d [offset] %d\n",l,offset);
 
     return l;
@@ -100,10 +102,18 @@ size_t mix_nvm_write(void* src, size_t len, size_t offset,size_t flags){
         l = len;
     }
     //_mm_sfence();
-    mix_ntstorenx32(nvm_info->nvm_buffer+offset,src,l);
+    mix_ntstorenx32(nvm_info->nvm+offset,src,l);
 
     //printf("nvm task local time is %d\n",local_time++);
     //printf("[%d]:[len] %d [offset] %d\n",local_time++,l,offset);
 
     return l;
+}
+
+size_t mix_buffer_read(void* src, size_t len, size_t offset, size_t flags){
+
+}
+
+size_t mix_buffer_write(void* dst, size_t len, size_t offset, size_t flags){
+
 }

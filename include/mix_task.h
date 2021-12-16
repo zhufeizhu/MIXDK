@@ -5,6 +5,10 @@
 #include "mixdk.h"
 #include <stdatomic.h>
 
+#define NVM_TASK 1
+#define SSD_TASK 2
+#define CLEAR_TASK 3
+
 #define TASK_SUCCEED 0
 #define TASK_FAILED 1
 
@@ -27,7 +31,7 @@ typedef struct io_task{
 
 // 对任务进行处理后得到的任务数组
 typedef struct io_tasks{
-    io_task_t* tasks[1024]; //当前的任务集合
+    io_task_t tasks[1024]; //当前的任务集合
     int task_num;           //当前任务的个数
 }io_task_v;
 

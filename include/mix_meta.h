@@ -32,10 +32,14 @@ bool mix_init_metadata(uint32_t offset,uint32_t block_num);
 
 bool mix_init_free_segment(free_segment_t* segment,uint32_t offset, uint32_t block_num);
 
-uint32_t mix_get_next_free_block(int idx, io_task_t* task);
+uint32_t mix_get_next_free_block(int idx);
 
-uint32_t mix_clear_block(int idx, io_task_t* task);
+void mix_clear_block(int idx, io_task_t* task);
 
 int mix_free_free_segment(free_segment_t* segments);
+
+bool mix_bloom_filter_test(uint32_t offset);
+
+bool mix_write_redirect_block(int idx, uint32_t offset, int bit);
 
 #endif
