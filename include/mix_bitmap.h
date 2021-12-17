@@ -1,19 +1,20 @@
 #ifndef MIX_BITMAP_H
 #define MIX_BITMAP_H
-#include <unistd.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #ifdef __cplusplus
-extern "C"{
+extern "C" {
 #endif
 
-typedef struct{
+typedef struct {
     char* array;
     int bytes;
     int next_bit;
-    size_t* nvm_offset; //用来记录在nvm中的偏移 在启动时使用mmap映射到内存中 暂时不使用
+    size_t* nvm_offset;  //用来记录在nvm中的偏移 在启动时使用mmap映射到内存中
+                         //暂时不使用
     pthread_rwlock_t* rwlock;
-}mix_bitmap_t;
+} mix_bitmap_t;
 
 //常规的bitmap 用在记录fragment中的block是否被使用
 mix_bitmap_t* mix_bitmap_init(int size);
@@ -28,13 +29,19 @@ int mix_bitmap_free(mix_bitmap_t* bitmap);
 
 int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap);
 
-//couting bitmap 用在counting bloom filter中 
-// reference from https://github.com/bitly/dablooms
-int mix_counting_bitmap_increment(mix_bitmap_t* bitmap, unsigned int index, long offset);
+// couting bitmap 用在counting bloom filter中
+//  reference from https://github.com/bitly/dablooms
+int mix_counting_bitmap_increment(mix_bitmap_t* bitmap,
+                                  unsigned int index,
+                                  long offset);
 
-int mix_counting_bitmap_decrement(mix_bitmap_t* bitmap, unsigned int index, long offset);
+int mix_counting_bitmap_decrement(mix_bitmap_t* bitmap,
+                                  unsigned int index,
+                                  long offset);
 
-int mix_counting_bitmap_check(mix_bitmap_t* bitmap, unsigned int index, long offset);
+int mix_counting_bitmap_check(mix_bitmap_t* bitmap,
+                              unsigned int index,
+                              long offset);
 
 #ifdef __cplusplus
 }

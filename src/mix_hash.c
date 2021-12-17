@@ -1,11 +1,11 @@
 #include "mix_hash.h"
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <pthread.h>
-#include <string.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static unsigned long crc32_tab[] = {
     0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL, 0x076dc419L,
@@ -59,64 +59,59 @@ static unsigned long crc32_tab[] = {
     0xbdbdf21cL, 0xcabac28aL, 0x53b39330L, 0x24b4a3a6L, 0xbad03605L,
     0xcdd70693L, 0x54de5729L, 0x23d967bfL, 0xb3667a2eL, 0xc4614ab8L,
     0x5d681b02L, 0x2a6f2b94L, 0xb40bbe37L, 0xc30c8ea1L, 0x5a05df1bL,
-    0x2d02ef8dL
-};
+    0x2d02ef8dL};
 
-static unsigned long crc32(const unsigned char *s, unsigned int len)
-{
-  unsigned int i;
-  unsigned long crc32val;
-  
-  crc32val = 0;
-  for (i = 0;  i < len;  i ++)
-    {
-      crc32val =
-	crc32_tab[(crc32val ^ s[i]) & 0xff] ^
-	  (crc32val >> 8);
+static unsigned long crc32(const unsigned char* s, unsigned int len) {
+    unsigned int i;
+    unsigned long crc32val;
+
+    crc32val = 0;
+    for (i = 0; i < len; i++) {
+        crc32val = crc32_tab[(crc32val ^ s[i]) & 0xff] ^ (crc32val >> 8);
     }
-  return crc32val;
+    return crc32val;
 }
 
-static int mix_hash_hash(uint32_t int_key,int hash_size){
+static int mix_hash_hash(uint32_t int_key, int hash_size) {
     char keystring[20];
-    memset(keystring,'0',20);
-    sprintf(keystring,"%d",int_key);
+    memset(keystring, '0', 20);
+    sprintf(keystring, "%d", int_key);
 
-    unsigned long key = crc32((unsigned char*)(keystring),strlen(keystring));
+    unsigned long key = crc32((unsigned char*)(keystring), strlen(keystring));
 
     key += (key << 12);
-	key ^= (key >> 22);
-	key += (key << 4);
-	key ^= (key >> 9);
-	key += (key << 10);
-	key ^= (key >> 2);
-	key += (key << 7);
-	key ^= (key >> 12);
+    key ^= (key >> 22);
+    key += (key << 4);
+    key ^= (key >> 9);
+    key += (key << 10);
+    key ^= (key >> 2);
+    key += (key << 7);
+    key ^= (key >> 12);
 
     key = (key >> 3) * 2654435761;
 
-	return key % hash_size;
+    return key % hash_size;
 }
 
-mix_hash_t* mix_init_hash(int size){
+mix_hash_t* mix_init_hash(int size) {
     mix_hash_t* hash = malloc(sizeof(mix_hash_t));
-    if(hash == NULL){
+    if (hash == NULL) {
         perror("alloc memory for hash failed");
         return NULL;
     }
     hash->hash_nodes = malloc(sizeof(hash_node_t) * size);
-    if(hash->hash_nodes == NULL){
+    if (hash->hash_nodes == NULL) {
         perror("alloc memory for hash failed");
         return NULL;
     }
     hash->hash_size = size;
-    for(int i = 0; i < size; i++){
+    for (int i = 0; i < size; i++) {
         hash->hash_nodes[i].brtree = NULL;
         hash->hash_nodes[i].len = 0;
         hash->hash_nodes[i].list = NULL;
         hash->hash_nodes[i].threshold = 0;
         hash->hash_nodes[i].rw_lock = malloc(sizeof(pthread_rwlock_t));
-        if(pthread_rwlock_init(hash->hash_nodes[i].rw_lock,NULL)){
+        if (pthread_rwlock_init(hash->hash_nodes[i].rw_lock, NULL)) {
             perror("init read write lock failed");
             free(hash->hash_nodes);
             free(hash);
@@ -126,17 +121,18 @@ mix_hash_t* mix_init_hash(int size){
     return hash;
 }
 
-
 /**
  * @brief 创建hash_node 后续考虑使用对象池
- * 
- * @param key 
- * @param value 
- * @return hash_list_node_t* 
+ *
+ * @param key
+ * @param value
+ * @return hash_list_node_t*
  */
-static inline hash_list_node_t* mix_hash_node_get(uint32_t key, uint32_t value){
-    hash_list_node_t* node = (hash_list_node_t*)malloc(sizeof(hash_list_node_t));
-    if(node == NULL){
+static inline hash_list_node_t* mix_hash_node_get(uint32_t key,
+                                                  uint32_t value) {
+    hash_list_node_t* node =
+        (hash_list_node_t*)malloc(sizeof(hash_list_node_t));
+    if (node == NULL) {
         perror("init hash node failed");
         return NULL;
     }
@@ -149,25 +145,25 @@ static inline hash_list_node_t* mix_hash_node_get(uint32_t key, uint32_t value){
 
 /**
  * @brief 释放hash_node 后续考虑用对象池
- * 
+ *
  * @param node 要释放的hash_node
  */
-static inline void mix_hahs_node_put(hash_list_node_t* node){
+static inline void mix_hahs_node_put(hash_list_node_t* node) {
     free(node);
 }
 
 /**
  * @brief 将key插入到hash中
- * 
+ *
  * @param hash hash_table
  * @param key 要插入的key
  * @param value 要插入的value
  */
-void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value){
-    int hash_key = mix_hash_hash(key,hash->hash_size);
+void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value) {
+    int hash_key = mix_hash_hash(key, hash->hash_size);
     hash_node_t* node = &(hash->hash_nodes[hash_key]);
-    hash_list_node_t* new_node = mix_hash_node_get(key,value);
-    
+    hash_list_node_t* new_node = mix_hash_node_get(key, value);
+
     pthread_rwlock_wrlock(node->rw_lock);
     new_node->next = node->list;
     node->list = new_node;
@@ -175,18 +171,18 @@ void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value){
     pthread_rwlock_unlock(node->rw_lock);
 }
 
-int mix_hash_get(mix_hash_t* hash, uint32_t key){
+int mix_hash_get(mix_hash_t* hash, uint32_t key) {
     int offset = -1;
-    uint32_t hash_key = mix_hash_hash(key,hash->hash_size);
-    
+    uint32_t hash_key = mix_hash_hash(key, hash->hash_size);
+
     hash_node_t node = hash->hash_nodes[hash_key];
     pthread_rwlock_wrlock(node.rw_lock);
     hash_list_node_t* cur = node.list;
-    while(cur){
-        if(cur->key == key){
+    while (cur) {
+        if (cur->key == key) {
             offset = cur->value;
             break;
-        }else{
+        } else {
             cur = cur->next;
         }
     }
@@ -194,26 +190,26 @@ int mix_hash_get(mix_hash_t* hash, uint32_t key){
     return offset;
 }
 
-void mix_hash_delete(mix_hash_t* hash, uint32_t key){
-    int hash_key = mix_hash_hash(key,hash->hash_size);
+void mix_hash_delete(mix_hash_t* hash, uint32_t key) {
+    int hash_key = mix_hash_hash(key, hash->hash_size);
 
     hash_node_t* node = &(hash->hash_nodes[hash_key]);
-    
+
     pthread_rwlock_wrlock(node->rw_lock);
     hash_list_node_t* head = node->list;
     hash_list_node_t* prev = NULL;
     hash_list_node_t* cur = head;
-    while(cur){
-        if(cur->key == key){
+    while (cur) {
+        if (cur->key == key) {
             //头节点
-            if(cur == head){
+            if (cur == head) {
                 hash->hash_nodes[hash_key].list = cur->next;
-            }else{
+            } else {
                 prev->next = cur->next;
                 free(cur);
             }
             break;
-        }else{
+        } else {
             prev = cur;
             cur = cur->next;
         }
@@ -225,36 +221,38 @@ void mix_hash_delete(mix_hash_t* hash, uint32_t key){
 
 /**
  * @brief 判断hash中是否有对应的key-value
- * 
- * @param hash 
- * @param key 
- * @return int 
+ *
+ * @param hash
+ * @param key
+ * @return int
  */
-int mix_hash_has_key(mix_hash_t* hash, uint32_t key){
-    int hash_key = (key,hash->hash_size);
+int mix_hash_has_key(mix_hash_t* hash, uint32_t key) {
+    int hash_key = (key, hash->hash_size);
 
     hash_list_node_t* node = hash->hash_nodes[hash_key].list;
 
-    while(node && node->key != key){
+    while (node && node->key != key) {
         node = node->next;
     }
 
-    if(node == NULL) return 0;
-    else 
+    if (node == NULL)
+        return 0;
+    else
         return 1;
 }
 
 /**
  * @brief 释放mix_hash占用的内存
-**/
-void mix_free_hash(mix_hash_t* hash){
-    if(hash == NULL)    return;    
-    for(int i = 0; i < hash->hash_size; i++){
+ **/
+void mix_free_hash(mix_hash_t* hash) {
+    if (hash == NULL)
+        return;
+    for (int i = 0; i < hash->hash_size; i++) {
         free(hash->hash_nodes[i].brtree);
         free(hash->hash_nodes[i].rw_lock);
         hash_list_node_t* cur = hash->hash_nodes[i].list;
         hash_list_node_t* next = NULL;
-        while(cur){
+        while (cur) {
             next = cur->next;
             free(cur);
             cur = next;

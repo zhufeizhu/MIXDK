@@ -1,7 +1,7 @@
 #ifndef MIX_LOG_H
 #define MIX_LOG_H
 
-#define MIX_DEBUG 1 
+#define MIX_DEBUG 1
 
 #ifdef MIX_DEBUG
 #include <stdio.h>

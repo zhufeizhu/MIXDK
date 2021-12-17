@@ -13,4 +13,4 @@ int mix_post_task_to_ssd(io_task_t*);
 
 atomic_int mix_get_completed_ssd_task_num();
 
-#endif //MIX_SSD_QUEUE_H
+#endif  // MIX_SSD_QUEUE_H
