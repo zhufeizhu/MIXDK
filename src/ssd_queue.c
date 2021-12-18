@@ -1,4 +1,4 @@
-#include "ssd_queue.h"
+#include "ssd_worker.h"
 
 #include <assert.h>
 #include <pthread.h>
@@ -42,7 +42,7 @@ static inline void mix_ssd_task_completed(io_task_t* task) {
     atomic_store(task->flag, true);
 }
 
-static void mix_submit_to_ssd(void* arg) {
+static void ssd_worker(void* arg) {
     int len = 0;
     int ret = 0;
     while (1) {
@@ -89,7 +89,7 @@ ssd_info_t* mix_init_ssd_queue(unsigned int size, unsigned int esize) {
 
     ssd_queue = mix_queue_init(size, esize);
 
-    if (pthread_create(&pid, NULL, (void*)mix_submit_to_ssd, NULL)) {
+    if (pthread_create(&pid, NULL, (void*)ssd_worker, NULL)) {
         printf("create ssd queue failed\n");
         free(ssd_info);
         return NULL;
@@ -103,9 +103,9 @@ ssd_info_t* mix_init_ssd_queue(unsigned int size, unsigned int esize) {
  **/
 
 int mix_post_task_to_ssd(io_task_t* task) {
-    int l = 0;
-    while (l == 0) {
-        l = mix_enqueue(ssd_queue, task, 1);
+    int len = 0;
+    while (len == 0) {
+        len = mix_enqueue(ssd_queue, task, 1);
     }
-    return l;
+    return len;
 }

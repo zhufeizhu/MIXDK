@@ -1,5 +1,5 @@
-#ifndef MIX_SSD_QUEUE_H
-#define MIX_SSD_QUEUE_H
+#ifndef MIX_SSD_WORKER_H
+#define MIX_SSD_WORKER_H
 
 #include "mix_queue.h"
 #include "mix_task.h"
@@ -7,7 +7,7 @@
 
 #include <stdatomic.h>
 
-ssd_info_t* mix_init_ssd_queue(unsigned int, unsigned int);
+ssd_info_t* mix_init_ssd_worker(unsigned int, unsigned int);
 
 int mix_post_task_to_ssd(io_task_t*);
 

@@ -7,22 +7,6 @@
 #include "mix_task.h"
 
 static mix_metadata_t* meta_data;
-static mix_queue_t* meta_queue;
-
-void* mix_submit_to_meta(void* arg) {
-    meta_task_t* meta_task = NULL;
-    int len = 0;
-    int ret = 0;
-
-    meta_task = malloc(sizeof(meta_task_t));
-    if (meta_task == NULL) {
-        mix_log("mix_submit_to_meta", "malloc meta_task failed");
-        return;
-    }
-
-    while (1) {
-    }
-}
 
 /**
  * @brief 申请并初始化metadata 包括全局的hash 全局的bloom_filter
@@ -59,9 +43,16 @@ bool mix_init_metadata(uint32_t block_num) {
         }
     }
 
-    pid = pthread_create();
-
     return true;
+}
+
+void mix_free_metadata() {
+    for (int i = 0; i < SEGMENT_NUM; i++) {
+        mix_free_free_segment(&(meta_data->segments[i]));
+    }
+    mix_free_hash(meta_data->hash);
+    mix_free_counting_bloom_filter(meta_data->bloom_filter);
+    free(meta_data);
 }
 
 /**
@@ -78,6 +69,12 @@ bool mix_init_free_segment(free_segment_t* segment, uint32_t size) {
     return true;
 };
 
+void mix_free_free_segment(free_segment_t* segment) {
+    if (segment == NULL)
+        return;
+    mix_bitmap_free(segment->bitmap);
+}
+
 /**
  * @brief 为task获取free_segment中下一个空闲块 返回的值代表该块在buffer中的偏移
  **/
@@ -88,11 +85,14 @@ uint32_t mix_get_next_free_block(int idx) {
 }
 
 /**
- * 整个流程包含3步来设置元数据
+ * @brief 整个流程包含3步来设置元数据
  * 1. 将对应的bitmap设置为dirty
  * 2. 将key-value保存到hash中
  * 3. 将key保存到bloom filter中
  * 通过自描述来保证原子性
+ *
+ * @return true表示当前idx已满
+ *         false表示当前idx未满
  **/
 bool mix_write_redirect_block(int idx, uint32_t offset, int bit) {
     uint32_t value = bit + idx * meta_data->per_block_num;
@@ -110,7 +110,7 @@ bool mix_write_redirect_block(int idx, uint32_t offset, int bit) {
     meta_data->segments[idx].used_block_num++;
     if (meta_data->segments[idx].used_block_num ==
         meta_data->segments[idx].block_num) {
-        meta_data->segments[idx].migration = true;
+        meta_data->migration = true;
     }
     return true;
 }

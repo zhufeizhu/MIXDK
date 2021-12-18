@@ -9,7 +9,8 @@
 
 #define NVM_TASK 1
 #define SSD_TASK 2
-#define CLEAR_TASK 3
+#define BUFFER_TASK 3
+#define CLEAR_TASK 4
 
 #define TASK_SUCCEED 0
 #define TASK_FAILED 1
@@ -30,12 +31,6 @@ typedef struct io_task {
     atomic_bool* flag;    //标明当前任务是否完成
     __uint8_t queue_idx;  //标明当前任务所在队列的索引
 } __attribute__((packed)) io_task_t;
-
-typedef struct meta_task {
-    size_t len;     //长度
-    size_t offset;  //偏移
-    uint8_t type;   //类型
-} __attribute__((packed)) meta_task_t;
 
 // 对任务进行处理后得到的任务数组
 typedef struct io_tasks {

@@ -1,4 +1,4 @@
-#include "nvm_queue.h"
+#include "nvm_worker.h"
 
 #include <assert.h>
 #include <pthread.h>
@@ -7,12 +7,14 @@
 
 #include "mix_meta.h"
 #include "nvm.h"
-#include "ssd_queue.h"
+#include "ssd_worker.h"
 
 #define NVM_QUEUE_NUM 4
 #define BLOCK_SZIE 4096
 
 static mix_queue_t** nvm_queue = NULL;
+static mix_queue_t* buffer_queue = NULL;
+
 _Atomic int completed_nvm_task_num = 0;
 
 /**
@@ -71,7 +73,7 @@ atomic_int mix_get_completed_nvm_task_num() {
 
 static atomic_int task_num = 0;
 
-static void mix_submit_to_nvm(void* arg) {
+static void nvm_worker(void* arg) {
     int idx = *(int*)arg;  //当前线程对应的队列序号
     int len = 0;
     int ret = 0;
@@ -87,49 +89,46 @@ static void mix_submit_to_nvm(void* arg) {
             continue;
         }
 
-        if (task->type == CLEAR_TASK) {
-            // 清空buffer的缓存任务
-            mix_clear_blocks(task);
-        } else {
-            size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
-            switch (op_code) {
-                case MIX_READ: {
-                    if (task->redirect == 1) {
-                        ret = mix_read_from_buffer(task->buf, task->offset,
-                                                   task->opcode);
-                        if (!ret) {
-                            //表明当前block不在buffer 需要转发到ssd
-                            mix_post_task_to_ssd(task);
-                        }
-                    } else {
-                        ret = mix_read_from_nvm(task->buf, task->len,
-                                                task->offset, task->opcode);
+        size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
+        switch (op_code) {
+            case MIX_READ: {
+                if (task->redirect == 1) {
+                    ret = mix_read_from_buffer(task->buf, task->offset,
+                                               task->opcode);
+                    if (!ret) {
+                        //表明当前block不在buffer 需要转发到ssd
+                        mix_post_task_to_ssd(task);
                     }
-                    break;
-                };
-                case MIX_WRITE: {
-                    if (task->redirect == 1) {
-                        // 写buffer
-                        uint32_t bit = mix_get_next_free_block(idx);
-                        ret = mix_write_to_buffer(task->buf, task->len, bit,
-                                                  task->opcode);
-                        if (ret) {
-                            mix_write_redirect_block(idx, task->offset, bit);
-                        }
-                    } else {
-                        //写nvm
-                        ret = mix_write_to_nvm(task->buf, task->len,
-                                               task->offset, task->opcode);
-                    }
-                    break;
-                };
-                default: {
-                    ret = 0;
-                    break;
+                } else {
+                    ret = mix_read_from_nvm(task->buf, task->len, task->offset,
+                                            task->opcode);
                 }
-                    task->ret = ret;
-                    mix_nvm_task_completed(task);
+                break;
+            };
+            case MIX_WRITE: {
+                if (task->redirect == 1) {
+                    // 写buffer
+                    uint32_t bit = mix_get_next_free_block(idx);
+                    ret = mix_write_to_buffer(task->buf, task->len, bit,
+                                              task->opcode);
+                    if (ret) {
+                        if (mix_write_redirect_block(idx, task->offset, bit)) {
+                            mix_migerate_segment(idx);
+                        }
+                    }
+                } else {
+                    //写nvm
+                    ret = mix_write_to_nvm(task->buf, task->len, task->offset,
+                                           task->opcode);
+                }
+                break;
+            };
+            default: {
+                ret = 0;
+                break;
             }
+                task->ret = ret;
+                mix_nvm_task_completed(task);
         }
     }
     // impossible run here
@@ -139,20 +138,13 @@ static void mix_submit_to_nvm(void* arg) {
 
 int indexs[NVM_QUEUE_NUM];
 
-nvm_info_t* mix_init_nvm_queue(unsigned int size, unsigned int esize) {
+nvm_info_t* mix_init_nvm_worker(unsigned int size, unsigned int esize) {
     nvm_info_t* nvm_info = NULL;
-    buffer_info_t* buffer_info = NULL;
     pthread_t pid[NVM_QUEUE_NUM];
 
     if ((nvm_info = mix_nvm_init()) == NULL) {
         return NULL;
     }
-
-    if ((buffer_info = mix_buffer_init()) == NULL) {
-        return NULL;
-    }
-
-    mix_init_metadata(buffer_info->block_num);
 
     nvm_queue = malloc(NVM_QUEUE_NUM * sizeof(mix_queue_t*));
     if (nvm_queue == NULL) {
@@ -161,13 +153,16 @@ nvm_info_t* mix_init_nvm_queue(unsigned int size, unsigned int esize) {
 
     for (int i = 0; i < NVM_QUEUE_NUM; i++) {
         nvm_queue[i] = mix_queue_init(size, esize);
-    };
+        if (nvm_queue[i] == NULL) {
+            return NULL;
+        }
+    }
 
     for (int i = 0; i < NVM_QUEUE_NUM; i++)
         indexs[i] = i;
 
     for (int i = 0; i < NVM_QUEUE_NUM; i++) {
-        if (pthread_create(&pid[i], NULL, (void*)mix_submit_to_nvm,
+        if (pthread_create(&pid[i], NULL, (void*)nvm_worker,
                            (void*)(indexs + i))) {
             printf("create ssd queue failed\n");
             free(nvm_info);
@@ -176,6 +171,23 @@ nvm_info_t* mix_init_nvm_queue(unsigned int size, unsigned int esize) {
     }
 
     return nvm_info;
+}
+
+buffer_info_t* mix_init_buffer(unsigned int size, unsigned int esize) {
+    buffer_info_t* buffer_info = NULL;
+    if ((buffer_info = mix_buffer_init()) == NULL) {
+        return NULL;
+    }
+
+    mix_init_metadata(buffer_info->block_num);
+
+    buffer_queue = mix_queue_init(size, esize);
+    if (buffer_queue == NULL) {
+        mix_free_metadata();
+        return NULL;
+    }
+
+    return buffer_info;
 }
 
 int pre_nvm_ind = 0;
@@ -201,4 +213,11 @@ int mix_post_task_to_nvm(io_task_t* task) {
         }
     }
     return l;
+}
+
+int mix_post_task_to_buffer(io_task_t* task) {
+    int len = 0;
+    while (!len) {
+        len = mix_enqueue(buffer_queue, task, 1);
+    }
 }

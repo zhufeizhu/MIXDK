@@ -10,14 +10,14 @@
 #include "mix_meta.h"
 #include "mix_task.h"
 #include "mixdk.h"
-#include "nvm_queue.h"
-#include "ssd_queue.h"
+#include "nvm_worker.h"
+#include "ssd_worker.h"
 
 //数据定义区
 static scheduler_ctx_t* sched_ctx = NULL;
 static const size_t threshold = 4096;
 
-static meta_task_t* meta_task;
+static io_task_t* meta_task;
 
 int mix_wait_for_task_completed(atomic_bool* flag) {
     while (atomic_load(flag) == false) {
@@ -43,12 +43,12 @@ size_t get_completed_task_num() {
 static atomic_int task_num = 0;
 
 int mix_post_task_to_io(io_task_t* task) {
-    int l = 0;
-    while (l == 0) {
-        l = mix_enqueue(sched_ctx->submit_queue, task, 1);
+    int len = 0;
+    while (len == 0) {
+        len = mix_enqueue(sched_ctx->submit_queue, task, 1);
     }
 
-    return l;
+    return len;
 }
 
 /**
@@ -77,6 +77,7 @@ static inline io_task_t* schedule(io_task_t* task) {
             // 用于查询当前block是否在buffer中 如果在的话 清空其对应的元数据
             // 同时并行的将内容写到ssd中
             if (task->len <= threshold) {  //将写向ssd的小块 重定向的nvm中
+                task->type = BUFFER_TASK;
                 return NULL;
             } else {
                 // ssd的大写 需要清空metadata中记录的相关ssd的数据信息
@@ -84,7 +85,7 @@ static inline io_task_t* schedule(io_task_t* task) {
                 meta_task->len = task->len;
                 meta_task->offset = task->offset;
                 meta_task->type = CLEAR_TASK;
-                return p_task;
+                return meta_task;
             }
         } else if (task->opcode & MIX_READ) {
             // 读操作直接重定向到nvm中 让nvm队列执行相关的查询操作
@@ -109,12 +110,16 @@ static void scheduler(void* arg) {
             continue;
         }
         io_task_t* new_task = schedule(io_task);
-        // 并发执行大写时删除buffer中元数据的动作
+        // 并发执行大写时删除buffer中元数据的动作 将任务提交到buffer队列中
         if (new_task != NULL && new_task->type == CLEAR_TASK) {
-            mix_post_task_to_nvm(new_task);
+            mix_post_task_to_buffer(new_task);
         }
 
         switch (io_task->type) {
+            // 写buffer的任务
+            case BUFFER_TASK: {
+                mix_post_task_to_buffer(io_task);
+            }
             case NVM_TASK: {
                 // printf("post task num is %d\n",task_num++);
                 mix_post_task_to_nvm(io_task);
@@ -144,6 +149,7 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
     pthread_t scheduler_thread = 0;
     ssd_info_t* ssd_info = NULL;
     nvm_info_t* nvm_info = NULL;
+    buffer_info_t* buffer_info = NULL;
 
     sched_ctx = malloc(sizeof(scheduler_ctx_t));
     if (sched_ctx == NULL) {
@@ -201,18 +207,24 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
     }
     memset(sched_ctx->bitmap_lock, 0, max_current / 8);
 
-    ssd_info = mix_init_ssd_queue(size, esize);
+    ssd_info = mix_init_ssd_worker(size, esize);
     if (ssd_info == NULL) {
         return -1;
     }
 
-    nvm_info = mix_init_nvm_queue(size, esize);
+    nvm_info = mix_init_nvm_worker(size, esize);
     if (nvm_info == NULL) {
+        return -1;
+    }
+
+    buffer_info = mix_init_buffer(size, esize);
+    if (buffer_info == NULL) {
         return -1;
     }
 
     sched_ctx->ssd_info = ssd_info;
     sched_ctx->nvm_info = nvm_info;
+    sched_ctx->buffer_info = buffer_info;
 
     sched_ctx->metadata = malloc(sizeof(scheduler_metadata_t));
     if (sched_ctx->metadata == NULL) {

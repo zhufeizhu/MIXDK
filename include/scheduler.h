@@ -31,6 +31,7 @@ typedef struct scheduler_ctx {
     scheduler_metadata_t* metadata;  //
     ssd_info_t* ssd_info;
     nvm_info_t* nvm_info;
+    buffer_info_t* buffer_info;
 } scheduler_ctx_t;
 
 int mix_init_scheduler(unsigned int, unsigned int, int);
