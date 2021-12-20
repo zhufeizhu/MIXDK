@@ -17,7 +17,7 @@
 static scheduler_ctx_t* sched_ctx = NULL;
 static const size_t threshold = 4096;
 
-static io_task_t* meta_task;
+static io_task_t* p_task;
 
 int mix_wait_for_task_completed(atomic_bool* flag) {
     while (atomic_load(flag) == false) {
@@ -56,45 +56,72 @@ int mix_post_task_to_io(io_task_t* task) {
  * 需要将其中的每个task进行处理
  *
  * @param task 用户传入的io操作
- * @return io_task_t** 对用户传入的io操作的拆分
+ * @return io_task_t** 对用户传入的io操作的拆分 针对跨nvm和ssd的数据
  */
-static inline io_task_t* schedule(io_task_t* task) {
-    //当前task的offset在nvm的范围内
-    if ((size_t)task->offset < sched_ctx->metadata->nvm_size &&
-        task->offset >= 0) {
+static inline io_task_t* handle_task(io_task_t* task) {
+    //当前task的offset都在nvm的范围内
+    if ((size_t)(task->offset + task->len) <
+        sched_ctx->metadata->nvm_block_num) {
         // printf("nvm task\n");
         task->type = NVM_TASK;
         return NULL;
     }
 
-    if ((size_t)task->offset >= sched_ctx->metadata->nvm_size &&
-        (size_t)task->offset <
-            (sched_ctx->metadata->nvm_size + sched_ctx->metadata->ssd_size)) {
-        if (task->opcode & MIX_WRITE) {
-            // 写到ssd的请求分成大写和小写
-            // 针对小写 需要将该请求写到 buffer区 同时添加对应的元数据
-            // 针对大写 需要将该请求拆分成一个block大小的请求
-            // 用于查询当前block是否在buffer中 如果在的话 清空其对应的元数据
-            // 同时并行的将内容写到ssd中
-            if (task->len <= threshold) {  //将写向ssd的小块 重定向的nvm中
-                task->type = BUFFER_TASK;
-                return NULL;
-            } else {
-                // ssd的大写 需要清空metadata中记录的相关ssd的数据信息
-                // 这里生成的是删除旧block的元数据任务
-                meta_task->len = task->len;
-                meta_task->offset = task->offset;
-                meta_task->type = CLEAR_TASK;
-                return meta_task;
-            }
-        } else if (task->opcode & MIX_READ) {
-            // 读操作直接重定向到nvm中 让nvm队列执行相关的查询操作
-            task->redirect = 1;
-            return NULL;
-        }
+    //当前task的offset都在ssd的范围内
+    if ((size_t)task->offset >= sched_ctx->metadata->nvm_block_num) {
+        return NULL;
     }
+
+    //当前task跨过了nvm和ssd两个区域
+    if ((size_t)task->offset < sched_ctx->metadata->nvm_block_num &&
+        (size_t)(task->offset + task->len) >
+            sched_ctx->metadata->nvm_block_num) {
+        size_t len1 = sched_ctx->metadata->nvm_block_num - (size_t)task->offset;
+        size_t len2 = (size_t)(task->offset + task->len) -
+                      sched_ctx->metadata->nvm_block_num;
+
+        task->len = len1;
+        task->type = NVM_TASK;
+
+        p_task->len = len2;
+        p_task->offset = task->offset + len1;
+        p_task->type = SSD_TASK;
+        p_task->buf = task->buf + len1 * BLOCK_SIZE;
+        return p_task;
+    }
+
     // printf("[task offset]:%llu\n [nvm_size]:%llu\n
     // [ssd_size]:%llu\n",(size_t)task->offset,nvm_size,ssd_size);
+}
+
+/**
+ * @brief 将任务按照其类型进行转发 将nvm的任务发送nvm的queue中
+ * 将ssd的任务发送到buffer的queue中
+ *        后续需要在buffer中对ssd任务进行判断是否需要转发到ssd的queue中
+ *
+ * @param task
+ */
+inline void do_schedule(io_task_t* task) {
+    switch (task->type) {
+        // 写buffer的任务
+        case BUFFER_TASK: {
+            mix_post_task_to_buffer(task);
+        }
+        case NVM_TASK: {
+            // printf("post task num is %d\n",task_num++);
+            mix_post_task_to_nvm(task);
+            break;
+        };
+        case SSD_TASK: {
+            mix_post_task_to_buffer(
+                task);  // ssd的任务需要经过buffer进行处理之后执行
+            break;
+        };
+        default: {
+            // printf("post error\n");
+            break;
+        }
+    }
 }
 
 static void scheduler(void* arg) {
@@ -109,31 +136,14 @@ static void scheduler(void* arg) {
             // printf("empty\n");
             continue;
         }
-        io_task_t* new_task = schedule(io_task);
-        // 并发执行大写时删除buffer中元数据的动作 将任务提交到buffer队列中
-        if (new_task != NULL && new_task->type == CLEAR_TASK) {
-            mix_post_task_to_buffer(new_task);
+
+        io_task_t* new_task = handle_task(io_task);
+
+        if (new_task) {
+            do_schedule(new_task);
         }
 
-        switch (io_task->type) {
-            // 写buffer的任务
-            case BUFFER_TASK: {
-                mix_post_task_to_buffer(io_task);
-            }
-            case NVM_TASK: {
-                // printf("post task num is %d\n",task_num++);
-                mix_post_task_to_nvm(io_task);
-                break;
-            };
-            case SSD_TASK: {
-                mix_post_task_to_ssd(io_task);
-                break;
-            };
-            default: {
-                // printf("post error\n");
-                break;
-            }
-        }
+        do_schedule(io_task);
     }
 }
 

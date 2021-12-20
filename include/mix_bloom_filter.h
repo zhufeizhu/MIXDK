@@ -2,6 +2,7 @@
 #define MIX_BLOOM_FILTER_H
 
 #include <unistd.h>
+#include <stdint.h>
 
 #include "mix_bitmap.h"
 

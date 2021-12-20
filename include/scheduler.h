@@ -17,6 +17,8 @@ typedef struct scheduler_metadata {
     size_t size;       //元数据的大小
     size_t nvm_size;   // nvm的存储大小
     size_t ssd_size;   // ssd的存储大小
+    size_t ssd_block_num;   //ssd的block个数
+    size_t nvm_block_num;   //nvm的block个数
     size_t nvm_saddr;  // nvm数据区的起始偏移
     size_t ssd_saddr;  // ssd数据去的起始偏移
 } scheduler_metadata_t;
