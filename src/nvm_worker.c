@@ -15,11 +15,17 @@
 static const int threshold = 4096;
 static mix_queue_t** nvm_queue = NULL;
 static mix_queue_t* buffer_queue = NULL;
+static mix_metadata_t* meta_data = NULL;
+
 static io_task_t migrate_task;
 static io_task_t nvm_task;
 static io_task_t buffer_task;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 _Atomic int completed_nvm_task_num = 0;
+
+void mix_migrate_segment(int idx);
 
 /**
  * @param dst:读取的目标地址
@@ -34,13 +40,9 @@ static inline size_t mix_read_from_nvm(void* dst,
 }
 
 static inline size_t mix_read_from_buffer(void* dst,
-                                          size_t src_block,
+                                          size_t dst_block,
                                           size_t flags) {
-    int dst_block = mix_buffer_block_test(src_block);
-    if (dst_block == -1) {
-        return 0;
-    }
-    return mix_buffer_read(dst, src_block, dst_block, flags);
+    return mix_buffer_read(dst, dst_block, flags);
 }
 
 /**
@@ -75,7 +77,7 @@ atomic_int mix_get_completed_nvm_task_num() {
     return completed_nvm_task_num;
 }
 
-inline io_task_t* get_task_from_nvm_queue(int idx) {
+io_task_t* get_task_from_nvm_queue(int idx) {
     int len = mix_dequeue(nvm_queue[idx], &nvm_task, 1);
     if (len == 0) {
         return NULL;
@@ -84,45 +86,135 @@ inline io_task_t* get_task_from_nvm_queue(int idx) {
     }
 }
 
-inline io_task_t* get_task_from_buffer_queue(int idx) {
-    while ()
-        int len = mix_dequeue(buffer_queue, &buffer_task, 1);
-    if ()
-}
+io_task_t* get_task_from_buffer_queue(int idx) {
+    while (mix_segment_migrating(meta_data, idx))
+        ;
 
-void mix_migrate_segment(int idx) {
-    //将buffer_queue中的所有任务执行完毕
-    mix_segment_migration_begin(idx);
-    while (mix_dequeue(buffer_queue, &migrate_task, 1)) {
-        if (migrate_task.type == CLEAR_TASK) {
-            mix_clear_blocks(&migrate_task);
-        } else {
-            size_t op_code = migrate_task.opcode & (MIX_READ | MIX_WRITE);
-
-            if (op_code == MIX_READ) {
-                mix_read_from_buffer(migrate_task.buf, migrate_task.offset,
-                                     migrate_task.flag);
-            } else if (op_code == MIX_WRITE) {
-                mix_write_to_buffer(migrate_task.buf, migrate_task.offset,
-                                    migrate_task.flag);
-            }
-        }
-        mix_buffer_task_completed(&migrate_task);
+    pthread_mutex_lock(&mutex);
+    int len = mix_dequeue(buffer_queue, &buffer_task, 1);
+    pthread_mutex_unlock(&mutex);
+    if (len == 0) {
+        return NULL;
+    } else {
+        return &buffer_task;
     }
-    mix_segment_migration_end(idx);
 }
 
 static atomic_int task_num = 0;
+
+static size_t redirect_read(io_task_t* task, int idx) {
+    // 检查每一个块 判断是否在buffer中
+    size_t ret;
+    io_task_t read_task;
+    read_task.offset = -1;  //一个很大的整数
+    read_task.len = 0;
+    read_task.opcode = MIX_READ;
+    read_task.flag = task->flag;
+    int offset = 0;
+    for (int i = 0; i < task->len; i++) {
+        if ((offset = mix_buffer_block_test(meta_data, task->offset + i))) {
+            if (read_task.offset == -1) {
+                read_task.offset = task->offset + i;
+                read_task.len = 1;
+                read_task.buf = task->buf + BLOCK_SIZE * read_task.offset;
+            } else {
+                read_task.len++;
+            }
+        } else {
+            mix_post_task_to_ssd(&read_task);
+            ret += mix_read_from_buffer(task->buf + i * BLOCK_SIZE, offset,
+                                        task->opcode);
+            read_task.offset = -1;
+            read_task.len = 0;
+        }
+    }
+    if (read_task.offset != -1) {
+        mix_post_task_to_ssd(&read_task);
+    }
+    return ret;
+}
+
+/**
+ * @brief 执行ssd重定向写
+ * 小写: 将内容写到buffer中 并在元数据中添加对应的信息
+ * 大写: 将任务转发到ssd_queue中 并清楚元数据中对应的信息
+ *
+ * @param task 要执行重定向写的task
+ * @param idx you
+ * @return int
+ */
+static int redirect_write(io_task_t* task, int idx) {
+    //将所有要写的ssd的数据都删除 然后将任务转发到ssd中
+    if (task->len <= threshold) {
+        int offset = mix_buffer_block_test(meta_data, task->offset);
+        if (offset == -1) {
+            //如果不在buffer中
+            offset = mix_get_next_free_block(meta_data, idx);
+            if (offset == -1) {
+                //表明当前segment已经满了
+                //需要将当前segment进行迁移
+                mix_migrate_segment(idx);
+
+                //迁移后重新获取重定向的地址
+                offset = mix_get_next_free_block(meta_data, idx);
+            }
+
+            mix_write_to_buffer(task->buf, task->offset, offset, task->opcode);
+        }
+    } else {
+        //将当前task中包含的元数据都清空
+        //然后将数据异步的转发到ssd的queue中
+        mix_post_task_to_ssd(task);
+        mix_clear_blocks(meta_data, task);
+    }
+}
+
+/**
+ * @brief 将满了的segment中的数据迁移到对应的ssd中
+ * 在正式开始迁移前需要保证buffer_queue中的task都执行完成
+ *
+ * @param idx 需要执行迁移的segment的下标
+ */
+void mix_migrate_segment(int idx) {
+    int segment_idx = idx;
+
+    mix_segment_migration_begin(meta_data, segment_idx);
+    //将buffer_queue中的所有任务执行完毕
+    while (mix_dequeue(buffer_queue, &migrate_task, 1)) {
+        size_t op_code = migrate_task.opcode & (MIX_READ | MIX_WRITE);
+        if (op_code == MIX_READ) {
+            redirect_read(&migrate_task, idx);
+        } else if (op_code == MIX_WRITE) {
+            while (!mix_has_free_block(meta_data, (idx++) % SEGMENT_NUM))
+                ;
+            redirect_write(&migrate_task, idx);
+        }
+    }
+
+    //等待ssd_queue中的所有任务执行完毕
+    while (!mix_ssd_queue_is_empty())
+        ;
+    mix_migrate(meta_data, segment_idx);
+    mix_segment_migration_end(meta_data, segment_idx);
+}
 
 static void nvm_worker(void* arg) {
     int idx = *(int*)arg;  //当前线程对应的队列序号
     int len = 0;
     int ret = 0;
+    uint8_t seq = 0;
+    uint8_t mask = 0x01;
     io_task_t* task = NULL;
     while (1) {
-        task = get_task_from_nvm_queue(idx);
+        if (seq & mask)
+            task = get_task_from_nvm_queue(idx);
+        else
+            task = get_task_from_buffer_queue(idx);
+
         if (task == NULL)
             continue;
+        else
+            seq++;
 
         size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
         if (task->type == NVM_TASK) {
@@ -133,7 +225,7 @@ static void nvm_worker(void* arg) {
                     break;
                 };
                 case MIX_WRITE: {
-                    ret - mix_write_to_nvm(task->buf, task->len, task->offset,
+                    ret = mix_write_to_nvm(task->buf, task->len, task->offset,
                                            task->opcode);
                     break;
                 }
@@ -145,28 +237,12 @@ static void nvm_worker(void* arg) {
         } else if (task->type == SSD_TASK) {
             switch (op_code) {
                 case MIX_READ: {
+                    ret = redirect_read(task, idx);
+                    break;
                 }
                 case MIX_WRITE: {
-                    //将所有要写的ssd的数据都删除 然后将任务转发到ssd中
-                    if (task->len <= threshold) {
-                        int offset = mix_buffer_block_test(task->offset);
-                        if (offset == -1) {
-                            //如果不在buffer中
-                            offset = mix_get_next_free_block(idx);
-                            if (offset == -1) {
-                                //表明当前segment已经满了
-                                //需要将当前segment进行迁移
-                                mix_segment_migration_begin(idx);
-                                mix_migrate_segment(idx);
-                                mix_segment_migration_end(idx);
-                            }
-                        }
-                    } else {
-                        //将当前task中包含的元数据都清空
-                        //然后将数据异步的转发到ssd的queue中
-                        mix_post_task_to_ssd(task);
-                        mix_clear_blocks(task);
-                    }
+                    ret = redirect_write(task, idx);
+                    break;
                 }
                 default: {
                     ret = 0;
@@ -174,57 +250,8 @@ static void nvm_worker(void* arg) {
                 }
             }
         }
-
-        if (task->type == CLEAR_TASK) {
-            //先清空元数据 再将请求转发到ssd中
-            mix_clear_blocks(&migrate_task);
-            mix_post_task_to_ssd(&migrate_task);
-        }
-
-        if (task->type)
-
-            size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
-        switch (op_code) {
-            case MIX_READ: {
-                if (task->redirect == 1) {
-                    ret = mix_read_from_buffer(task->buf, task->offset,
-                                               task->opcode);
-                    if (!ret) {
-                        //表明当前block不在buffer 需要转发到ssd
-                        mix_post_task_to_ssd(task);
-                    }
-                } else {
-                    ret = mix_read_from_nvm(task->buf, task->len, task->offset,
-                                            task->opcode);
-                }
-                break;
-            };
-            case MIX_WRITE: {
-                if (task->redirect == 1) {
-                    // 写buffer
-                    uint32_t bit = mix_get_next_free_block(idx);
-                    ret = mix_write_to_buffer(task->buf, task->len, bit,
-                                              task->opcode);
-                    if (ret) {
-                        if (mix_write_redirect_block(idx, task->offset, bit)) {
-                            //表明当前已经满了 此时需要执行迁移操作
-                            mix_migrate_segment(idx);
-                        }
-                    }
-                } else {
-                    //写nvm
-                    ret = mix_write_to_nvm(task->buf, task->len, task->offset,
-                                           task->opcode);
-                }
-                break;
-            };
-            default: {
-                ret = 0;
-                break;
-            }
-                task->ret = ret;
-                mix_nvm_task_completed(task);
-        }
+        task->ret += ret;
+        mix_nvm_task_completed(task);
     }
     // impossible run here
     free(task);
@@ -233,7 +260,7 @@ static void nvm_worker(void* arg) {
 
 int indexs[NVM_QUEUE_NUM];
 
-nvm_info_t* mix_init_nvm_worker(unsigned int size, unsigned int esize) {
+nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize) {
     nvm_info_t* nvm_info = NULL;
     pthread_t pid[NVM_QUEUE_NUM];
 
@@ -274,11 +301,13 @@ buffer_info_t* mix_init_buffer(unsigned int size, unsigned int esize) {
         return NULL;
     }
 
-    mix_init_metadata(buffer_info->block_num);
+    meta_data = mix_init_metadata(buffer_info->block_num);
+    if (meta_data == NULL) {
+    }
 
     buffer_queue = mix_queue_init(size, esize);
     if (buffer_queue == NULL) {
-        mix_free_metadata();
+        mix_free_metadata(meta_data);
         return NULL;
     }
 
@@ -296,15 +325,11 @@ int retry_time = 0;
 int mix_post_task_to_nvm(io_task_t* task) {
     int l = 0;
     while (l == 0) {
-        if (task->queue_idx < 0) {
-            if (mix_has_free_block(pre_nvm_ind)) {
-                l = mix_enqueue(nvm_queue[pre_nvm_ind], task, 1);
-            } else {
-                l = 0;
-            }
-            pre_nvm_ind = (pre_nvm_ind + 1) % NVM_QUEUE_NUM;
-        } else {
+        if (task->queue_idx > 0) {
             l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
+        } else {
+            l = mix_enqueue(nvm_queue[pre_nvm_ind], task, 1);
+            pre_nvm_ind = (pre_nvm_ind + 1) % NVM_QUEUE_NUM;
         }
     }
     return l;

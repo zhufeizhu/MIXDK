@@ -2,23 +2,38 @@
 
 #include <stdlib.h>
 
+#include "mix_hash.h"
 #include "mix_log.h"
 #include "mix_queue.h"
 #include "mix_task.h"
+#include "nvm.h"
+#include "ssd.h"
 
-static mix_metadata_t* meta_data;
+/**
+ * @brief 申请并初始化segment
+ *
+ * @param size 每个segment的大小
+ */
+static bool mix_free_segment_init(free_segment_t* segment, uint32_t size) {
+    if (segment == NULL)
+        return false;
+    segment->bitmap = mix_bitmap_init(size / BLOCK_SIZE);
+    segment->block_num = size / BLOCK_SIZE;
+    segment->size = size;
+    return true;
+};
 
 /**
  * @brief 申请并初始化metadata 包括全局的hash 全局的bloom_filter
  *全局的free_segment等
  *
  **/
-bool mix_init_metadata(uint32_t block_num) {
+mix_metadata_t* mix_init_metadata(uint32_t block_num) {
     pthread_t pid;
-    meta_data = malloc(sizeof(mix_metadata_t));
+    mix_metadata_t* meta_data = malloc(sizeof(mix_metadata_t));
     if (meta_data == NULL) {
         mix_log("mix_init_metadata", "malloc for metadata failed");
-        return false;
+        return NULL;
     }
 
     meta_data->block_num = block_num;
@@ -28,42 +43,24 @@ bool mix_init_metadata(uint32_t block_num) {
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        meta_data->hash[i] = mix_init_hash(20);
+        meta_data->hash[i] = mix_hash_init(20);
         meta_data->bloom_filter[i] =
-            mix_init_counting_bloom_filter(meta_data->per_block_num, 0.01);
-        if (!mix_init_free_segment(&(meta_data->segments[i]),
+            mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
+        if (!mix_free_segment_init(&(meta_data->segments[i]),
                                    per_segment_size)) {
             mix_log("mix_init_metadata", "init free segment faield");
-            return false;
+            return NULL;
         }
     }
 
-    return true;
-}
-
-void mix_free_metadata() {
-    for (int i = 0; i < SEGMENT_NUM; i++) {
-        mix_free_free_segment(&(meta_data->segments[i]));
-    }
-    mix_free_hash(meta_data->hash);
-    mix_free_counting_bloom_filter(meta_data->bloom_filter);
-    free(meta_data);
+    return meta_data;
 }
 
 /**
- * @brief 申请并初始化segment
+ * @brief 释放segment申请的内存
  *
- * @param size 每个segment的大小
+ * @param segment
  */
-bool mix_init_free_segment(free_segment_t* segment, uint32_t size) {
-    if (segment == NULL)
-        return false;
-    segment->bitmap = mix_bitmap_init(size / BLOCK_SIZE);
-    segment->block_num = size / BLOCK_SIZE;
-    segment->size = size;
-    return true;
-};
-
 void mix_free_free_segment(free_segment_t* segment) {
     if (segment == NULL)
         return;
@@ -71,11 +68,26 @@ void mix_free_free_segment(free_segment_t* segment) {
 }
 
 /**
+ * @brief 释放meta_data申请的内存
+ *
+ * @param meta_data
+ */
+void mix_free_metadata(mix_metadata_t* meta_data) {
+    for (int i = 0; i < SEGMENT_NUM; i++) {
+        mix_free_free_segment(&(meta_data->segments[i]));
+        mix_hash_free(meta_data->hash[i]);
+        mix_counting_bloom_filter_free(meta_data->bloom_filter[i]);
+    }
+
+    free(meta_data);
+}
+
+/**
  * @brief 为task获取free_segment中下一个空闲块 返回的值代表该块在buffer中的偏移
  *
  * @return 不存在空闲块时返回-1 存在时返回其在buffer中的偏移
  **/
-int mix_get_next_free_block(int idx) {
+int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
     if (meta_data->segments[idx].migration) {
         return -1;
     }
@@ -94,7 +106,10 @@ int mix_get_next_free_block(int idx) {
  * @return true表示当前idx已满
  *         false表示当前idx未满
  **/
-bool mix_write_redirect_block(int idx, uint32_t offset, int bit) {
+bool mix_write_redirect_block(mix_metadata_t* meta_data,
+                              int idx,
+                              uint32_t offset,
+                              int bit) {
     uint32_t value = bit + idx * meta_data->per_block_num;
     //将对应的bitmap设置为dirty
     if (!mix_bitmap_set_bit(bit, meta_data->segments[idx].bitmap)) {
@@ -102,10 +117,10 @@ bool mix_write_redirect_block(int idx, uint32_t offset, int bit) {
     }
 
     //将key-value保存到hash中
-    mix_hash_put(&(meta_data->hash[idx]), offset, value);
+    mix_hash_put(meta_data->hash[idx], offset, value);
 
     //将key保存到bloom filter中
-    mix_counting_bloom_filter_add(&(meta_data->bloom_filter[idx]), offset);
+    mix_counting_bloom_filter_add(meta_data->bloom_filter[idx], offset);
 
     meta_data->segments[idx].used_block_num++;
     if (meta_data->segments[idx].used_block_num ==
@@ -123,26 +138,26 @@ bool mix_write_redirect_block(int idx, uint32_t offset, int bit) {
  * 3. 将对应的bitmap设置为clean
  * 需要保证以上为原子操作
  **/
-void mix_clear_blocks(io_task_t* task) {
+void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
     for (int i = 0; i < task->len; i++) {
         for (int j = 0; j < SEGMENT_NUM; j++) {
             // 查询是否在bloom_filter中
-            if (!mix_counting_bloom_filter_test(&(meta_data->bloom_filter[j]),
+            if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
                                                 task->offset + i)) {
                 continue;
             }
 
             // 查询是否在hash中
-            int value = mix_hash_get(&(meta_data->hash[j]), task->offset + i);
+            int value = mix_hash_get(meta_data->hash[j], task->offset + i);
             if (value == -1) {
                 continue;
             }
 
             //将key从bloom filter中移除
-            mix_counting_bloom_filter_remove(&(meta_data->bloom_filter[j]),
+            mix_counting_bloom_filter_remove(meta_data->bloom_filter[j],
                                              task->offset + i);
 
-            mix_hash_delete(&(meta_data->hash[j]), task->offset + i);
+            mix_hash_delete(meta_data->hash[j], task->offset + i);
 
             //将对应的bitmap设置为clean
             int bit = value % meta_data->per_block_num;
@@ -158,15 +173,15 @@ void mix_clear_blocks(io_task_t* task) {
  *
  * @return 如果在则返回对应的偏移 如果不在则返回-1
  **/
-int mix_buffer_block_test(uint32_t offset) {
+int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset) {
     int value = -1;
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        if (!mix_counting_bloom_filter_test(&(meta_data->bloom_filter[i]),
+        if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[i],
                                             offset)) {
             continue;
         }
 
-        int value = mix_hash_get(&(meta_data->hash[i]), offset);
+        int value = mix_hash_get(meta_data->hash[i], offset);
         if (value == -1) {
             continue;
         }
@@ -188,16 +203,18 @@ int mix_buffer_block_test(uint32_t offset) {
  * @return true 有空闲块
  * @return false 无空闲块
  */
-inline bool mix_in_migration(int idx) {
+inline bool mix_in_migration(mix_metadata_t* meta_data, int idx) {
     return meta_data->segments[idx].migration = true;
 }
+
+void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {}
 
 /**
  * @brief 将指定idx中buffer的数据迁入到ssd中
  *
  * @param idx
  */
-void mix_migrate(int idx) {
+void mix_migrate(mix_metadata_t* meta_data, int idx) {
     for (int i = 0; i < meta_data->per_block_num; i++) {
         mix_kv_t kv = mix_hash_get_entry(meta_data->hash[idx]);
         if (kv.key == (uint32_t)-1 && kv.value == (uint32_t)-1)
@@ -206,21 +223,25 @@ void mix_migrate(int idx) {
     }
 }
 
-/**
- * @brief migrate开始 将idx代表的segment设置为migration状态
- *
- * @param idx
- */
-inline void mix_segment_migration_begin(int idx) {
-    meta_data->segments[idx].migration = true;
+inline bool mix_segment_migrating(mix_metadata_t* meta_data, int idx) {
+    return meta_data->segments[idx].migration;
 }
 
-inline void mix_segment_migration_end(int idx) {
-    meta_data->segments[idx].migration = false;
-}
-
-inline bool mix_buffer_migrating() {
+inline bool mix_buffer_migrating(mix_metadata_t* meta_data) {
     return meta_data->segments[0].migration &&
            meta_data->segments[1].migration &&
            meta_data->segments[2].migration && meta_data->segments[3].migration;
+}
+
+inline void mix_segment_migration_begin(mix_metadata_t* meta_data, int idx) {
+    meta_data->segments[idx].migration = true;
+}
+
+inline void mix_segment_migration_end(mix_metadata_t* meta_data, int idx) {
+    meta_data->segments[idx].migration = false;
+}
+
+inline bool mix_has_free_block(mix_metadata_t* meta_data, int idx) {
+    return meta_data->segments[idx].used_block_num <
+           meta_data->segments[idx].block_num;
 }

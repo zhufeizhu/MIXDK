@@ -1,8 +1,8 @@
 #ifndef MIX_BLOOM_FILTER_H
 #define MIX_BLOOM_FILTER_H
 
-#include <unistd.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #include "mix_bitmap.h"
 
@@ -30,10 +30,10 @@ typedef struct {
     mix_bitmap_t* bitmap;
 } mix_counting_bloom_filter_t;
 
-mix_counting_bloom_filter_t* mix_init_counting_bloom_filter(uint32_t capacity,
+mix_counting_bloom_filter_t* mix_counting_bloom_filter_init(uint32_t capacity,
                                                             double error_rate);
 
-int mix_free_counting_bloom_filter(mix_counting_bloom_filter_t* bloom_filter);
+int mix_counting_bloom_filter_free(mix_counting_bloom_filter_t* bloom_filter);
 
 int mix_counting_bloom_filter_add(mix_counting_bloom_filter_t* bloom_filter,
                                   uint32_t key);

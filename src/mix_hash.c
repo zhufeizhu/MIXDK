@@ -93,7 +93,7 @@ static int mix_hash_hash(uint32_t int_key, int hash_size) {
     return key % hash_size;
 }
 
-mix_hash_t* mix_init_hash(int size) {
+mix_hash_t* mix_hash_init(int size) {
     mix_hash_t* hash = malloc(sizeof(mix_hash_t));
     if (hash == NULL) {
         perror("alloc memory for hash failed");
@@ -151,7 +151,7 @@ static inline hash_list_node_t* mix_hash_node_get(uint32_t key,
  *
  * @param node 要释放的hash_node
  */
-static inline void mix_hahs_node_put(hash_list_node_t* node) {
+static inline void mix_hash_node_free(hash_list_node_t* node) {
     free(node);
 }
 
@@ -247,7 +247,7 @@ int mix_hash_has_key(mix_hash_t* hash, uint32_t key) {
 /**
  * @brief 释放mix_hash占用的内存
  **/
-void mix_free_hash(mix_hash_t* hash) {
+void mix_hash_free(mix_hash_t* hash) {
     if (hash == NULL)
         return;
     for (int i = 0; i < hash->hash_size; i++) {

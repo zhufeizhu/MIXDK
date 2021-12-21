@@ -1,13 +1,17 @@
+cmake_minimum_required(VERSION 3.0.0)
+
+project(mix)
+
 set(CMAKE_C_STANDARD 11)
 
-aux_source_directory(. SRC_LIST)
+aux_source_directory(./src SRC_LIST)
 
-include_directories(../include)
+include_directories(include)
 
-add_definitions(-Wall -g -msse2) #支持pmdk指令
+add_definitions(-Werror -g -msse2) #支持pmdk指令
 
 add_executable(mixdk ${SRC_LIST})
 
-target_link_libraries(mixdk pthread)
+target_link_libraries(mixdk pthread m)
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)

@@ -7,10 +7,12 @@
 
 #include <stdatomic.h>
 
-ssd_info_t* mix_init_ssd_worker(unsigned int, unsigned int);
+ssd_info_t* mix_ssd_worker_init(unsigned int, unsigned int);
 
 int mix_post_task_to_ssd(io_task_t*);
 
 atomic_int mix_get_completed_ssd_task_num();
+
+atomic_bool mix_ssd_queue_is_empty();
 
 #endif  // MIX_SSD_QUEUE_H

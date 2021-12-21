@@ -1,13 +1,13 @@
 #ifndef MIX_HASH_H
 #define MIX_HASH_H
 #include <pthread.h>
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
-typedef struct mix_kv{
+typedef struct mix_kv {
     uint32_t key;
     uint32_t value;
-}mix_kv_t;
+} mix_kv_t;
 
 typedef struct hash_list_node {
     uint32_t key;
@@ -26,16 +26,16 @@ typedef struct hash_node {
 typedef struct mix_hash {
     int hash_size;
     hash_node_t* hash_nodes;
-    int hash_node_entry_idx;    //进行遍历时正在访问的hahs_node的序号
-    hash_list_node_t* hash_list_node_entry; //进行遍历时正在访问的hash_list_node的地址
+    int hash_node_entry_idx;  //进行遍历时正在访问的hahs_node的序号
+    hash_list_node_t*
+        hash_list_node_entry;  //进行遍历时正在访问的hash_list_node的地址
 } mix_hash_t;
-
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-mix_hash_t* mix_init_hash(int size);
+mix_hash_t* mix_hash_init(int size);
 
 void mix_hash_put(mix_hash_t* hash, uint32_t key, uint32_t value);
 
@@ -45,7 +45,7 @@ int mix_hash_has_key(mix_hash_t* hash, uint32_t key);
 
 void mix_hash_delete(mix_hash_t* hash, uint32_t key);
 
-void mix_free_hash(mix_hash_t* hash);
+void mix_hash_free(mix_hash_t* hash);
 
 mix_kv_t mix_hash_get_entry(mix_hash_t* hash);
 #ifdef __cplusplus

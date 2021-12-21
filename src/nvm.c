@@ -52,7 +52,7 @@ buffer_info_t* mix_buffer_init() {
     buffer_info->block_num = 4 * 1024;  //总共分成4块 一块有空间 一共占用16m
     buffer_info->buffer_capacity =
         (size_t)buffer_info->block_num * (4096 + sizeof(buffer_meta_t));
-    int raw_nvm_fd = oepn("/dev/pmem0", O_RDWR);
+    int raw_nvm_fd = open("/dev/pmem0", O_RDWR);
     buffer_info->meta_addr =
         mmap(NULL, buffer_info->buffer_capacity, PROT_READ | PROT_WRITE,
              MAP_SHARED, raw_nvm_fd, nvm_info->nvm_capacity);
@@ -150,10 +150,7 @@ size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     return l;
 }
 
-size_t mix_buffer_read(void* src,
-                       size_t src_block,
-                       size_t dst_block,
-                       size_t flags) {
+size_t mix_buffer_read(void* src, size_t dst_block, size_t flags) {
     buffer_meta_t meta;
 
     mix_ntstorenx32(src, buffer_info->buffer_addr + dst_block * BLOCK_SIZE,
@@ -178,4 +175,10 @@ size_t mix_buffer_write(void* src,
     mix_ntstorenx32(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
                     META_SIZE);
     return BLOCK_SIZE;
+}
+
+void mix_buffer_clear(size_t dst_block) {
+    size_t status = 0;
+    mix_ntstorenx32(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, &status,
+                    sizeof(size_t));
 }

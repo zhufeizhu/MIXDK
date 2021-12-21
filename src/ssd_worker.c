@@ -9,7 +9,9 @@
 #include "ssd.h"
 
 static mix_queue_t* ssd_queue;
+static atomic_bool queue_empty;
 static atomic_int completed_ssd_task_num = 0;
+static io_task_t ssd_task;
 
 /**
  * 从ssd中读数据
@@ -42,14 +44,22 @@ static inline void mix_ssd_task_completed(io_task_t* task) {
     atomic_store(task->flag, true);
 }
 
+io_task_t* get_task_from_ssd_queue() {
+    int len = mix_dequeue(ssd_queue, &ssd_task, 1);
+    if (len) {
+        queue_empty = true;
+    } else {
+        queue_empty = false;
+    }
+}
+
 static void ssd_worker(void* arg) {
     int len = 0;
     int ret = 0;
+    io_task_t* task = NULL;
     while (1) {
-        io_task_t* task = malloc(TASK_SIZE);
         len = mix_dequeue(ssd_queue, task, 1);
         if (!len) {
-            free(task);
             continue;
         }
 
@@ -79,7 +89,7 @@ static void ssd_worker(void* arg) {
     return;
 }
 
-ssd_info_t* mix_init_ssd_queue(unsigned int size, unsigned int esize) {
+ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
     ssd_info_t* ssd_info = NULL;
 
     pthread_t pid = 0;
@@ -108,4 +118,8 @@ int mix_post_task_to_ssd(io_task_t* task) {
         len = mix_enqueue(ssd_queue, task, 1);
     }
     return len;
+}
+
+atomic_bool mix_ssd_queue_is_empty() {
+    return queue_empty;
 }

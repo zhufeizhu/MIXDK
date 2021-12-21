@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "mix_log.h"
 #include "mix_meta.h"
 #include "mix_task.h"
 #include "mixdk.h"
@@ -60,25 +61,24 @@ int mix_post_task_to_io(io_task_t* task) {
  */
 static inline io_task_t* handle_task(io_task_t* task) {
     //当前task的offset都在nvm的范围内
-    if ((size_t)(task->offset + task->len) <
-        sched_ctx->metadata->nvm_block_num) {
+    if ((size_t)(task->offset + task->len) < sched_ctx->nvm_info->block_num) {
         // printf("nvm task\n");
+        task->queue_idx = (task->offset % (sched_ctx->nvm_info->block_num / 4));
         task->type = NVM_TASK;
         return NULL;
     }
 
     //当前task的offset都在ssd的范围内
-    if ((size_t)task->offset >= sched_ctx->metadata->nvm_block_num) {
+    if ((size_t)task->offset >= sched_ctx->nvm_info->block_num) {
         return NULL;
     }
 
     //当前task跨过了nvm和ssd两个区域
-    if ((size_t)task->offset < sched_ctx->metadata->nvm_block_num &&
-        (size_t)(task->offset + task->len) >
-            sched_ctx->metadata->nvm_block_num) {
-        size_t len1 = sched_ctx->metadata->nvm_block_num - (size_t)task->offset;
-        size_t len2 = (size_t)(task->offset + task->len) -
-                      sched_ctx->metadata->nvm_block_num;
+    if ((size_t)task->offset < sched_ctx->nvm_info->block_num &&
+        (size_t)(task->offset + task->len) > sched_ctx->nvm_info->block_num) {
+        size_t len1 = sched_ctx->nvm_info->block_num - (size_t)task->offset;
+        size_t len2 =
+            (size_t)(task->offset + task->len) - sched_ctx->nvm_info->block_num;
 
         task->len = len1;
         task->type = NVM_TASK;
@@ -101,7 +101,7 @@ static inline io_task_t* handle_task(io_task_t* task) {
  *
  * @param task
  */
-inline void do_schedule(io_task_t* task) {
+void do_schedule(io_task_t* task) {
     switch (task->type) {
         // 写buffer的任务
         case BUFFER_TASK: {
@@ -199,35 +199,23 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
         pthread_mutex_init(sched_ctx->ctx_mutex[i], NULL);
     }
 
-    sched_ctx->bitmap_lock = malloc(sizeof(pthread_mutex_t));
-    if (sched_ctx->bitmap_lock == NULL) {
-        return -1;
-    }
-    pthread_mutex_init(sched_ctx->bitmap_lock, NULL);
-
     sched_ctx->schedule_queue_lock = malloc(sizeof(pthread_mutex_t));
     if (sched_ctx->schedule_queue_lock == NULL) {
         return -1;
     }
     pthread_spin_init(sched_ctx->schedule_queue_lock, 1);
 
-    sched_ctx->bitmap_lock = malloc(max_current / 8);
-    if (sched_ctx->bitmap_lock == NULL) {
-        return -1;
-    }
-    memset(sched_ctx->bitmap_lock, 0, max_current / 8);
-
-    ssd_info = mix_init_ssd_worker(size, esize);
+    ssd_info = mix_ssd_worker_init(size, esize);
     if (ssd_info == NULL) {
         return -1;
     }
 
-    nvm_info = mix_init_nvm_worker(size, esize);
+    nvm_info = mix_nvm_worker_init(size, esize);
     if (nvm_info == NULL) {
         return -1;
     }
 
-    buffer_info = mix_init_buffer(size, esize);
+    buffer_info = mix_buffer_init(size, esize);
     if (buffer_info == NULL) {
         return -1;
     }
@@ -235,20 +223,6 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
     sched_ctx->ssd_info = ssd_info;
     sched_ctx->nvm_info = nvm_info;
     sched_ctx->buffer_info = buffer_info;
-
-    sched_ctx->metadata = malloc(sizeof(scheduler_metadata_t));
-    if (sched_ctx->metadata == NULL) {
-        return -1;
-    }
-
-    sched_ctx->metadata->nvm_size = nvm_info->nvm_capacity;  // nvm的大小
-    sched_ctx->metadata->ssd_size = ssd_info->ssd_capacity;  // ssd的大小
-
-    sched_ctx->metadata->size =
-        (sched_ctx->metadata->nvm_size + sched_ctx->metadata->ssd_size) /
-        2048;  // 8byte->4kb
-    sched_ctx->metadata->ssd_saddr = 0;
-    sched_ctx->metadata->nvm_saddr = sched_ctx->metadata->size;
 
     if (pthread_create(&scheduler_thread, NULL, (void*)scheduler, NULL)) {
         printf("create scheduler failed\n");

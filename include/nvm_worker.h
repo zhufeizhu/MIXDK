@@ -7,7 +7,7 @@
 
 #include <stdatomic.h>
 
-nvm_info_t* mix_init_nvm_worker(unsigned int, unsigned int);
+nvm_info_t* mix_nvm_worker_init(unsigned int, unsigned int);
 
 int mix_post_task_to_nvm(io_task_t*);
 

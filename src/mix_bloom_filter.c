@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -167,7 +168,7 @@ static void hash_func(mix_counting_bloom_filter_t* bloom_filter,
     }
 }
 
-mix_counting_bloom_filter_t* mix_init_counting_bloom_filter(
+mix_counting_bloom_filter_t* mix_counting_bloom_filter_init(
     unsigned int capacity,
     double error_rate) {
     mix_counting_bloom_filter_t* bloom_filter = NULL;
@@ -197,7 +198,7 @@ mix_counting_bloom_filter_t* mix_init_counting_bloom_filter(
     return bloom_filter;
 }
 
-int mix_free_counting_bloom_filter(mix_counting_bloom_filter_t* bloom_filter) {
+int mix_counting_bloom_filter_free(mix_counting_bloom_filter_t* bloom_filter) {
     if (bloom_filter == NULL)
         return 0;
 
