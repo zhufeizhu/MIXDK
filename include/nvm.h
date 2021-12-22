@@ -7,6 +7,7 @@
 typedef struct nvm_info {
     void* nvm_addr;  // nvm的内存起始地址
     size_t block_num;
+    size_t per_block_num;
     size_t nvm_capacity;
     int block_size;
     uint8_t queue_num;
@@ -29,6 +30,8 @@ typedef struct buffer_meta {
 nvm_info_t* mix_nvm_init();
 
 buffer_info_t* mix_buffer_init();
+
+void mix_mmap(nvm_info_t* nvm_info, buffer_info_t* buffer_info);
 
 size_t mix_nvm_read(void*, size_t, size_t, size_t);
 

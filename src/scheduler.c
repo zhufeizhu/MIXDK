@@ -63,9 +63,27 @@ static inline io_task_t* handle_task(io_task_t* task) {
     //当前task的offset都在nvm的范围内
     if ((size_t)(task->offset + task->len) < sched_ctx->nvm_info->block_num) {
         // printf("nvm task\n");
-        task->queue_idx = (task->offset % (sched_ctx->nvm_info->block_num / 4));
-        task->type = NVM_TASK;
-        return NULL;
+        // 还未考虑跨区的问题
+        int queue_idx1 = task->offset / sched_ctx->nvm_info->per_block_num;
+        int queue_idx2 =
+            (task->offset + task->len) / sched_ctx->nvm_info->per_block_num;
+        if (queue_idx1 == queue_idx1) {
+            task->queue_idx = queue_idx1;
+            task->type = NVM_TASK;
+            return NULL;
+        } else {
+            task->queue_idx = queue_idx1;
+            task->type = NVM_TASK;
+            task->len =
+                task->len - (task->offset % sched_ctx->nvm_info->per_block_num);
+
+            p_task->queue_idx = queue_idx2;
+            p_task->type = NVM_TASK;
+            p_task->len =
+                (task->len + task->offset) % sched_ctx->nvm_info->per_block_num;
+            p_task->buf = task->buf + p_task->len * BLOCK_SIZE;
+            return p_task;
+        }
     }
 
     //当前task的offset都在ssd的范围内
@@ -174,39 +192,44 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
         return -1;
     }
 
-    sched_ctx->completation_conds =
-        malloc(sizeof(pthread_cond_t*) * max_current);
-    if (sched_ctx->completation_conds == NULL) {
-        return -1;
-    }
-    for (int i = 0; i < max_current; i++) {
-        sched_ctx->completation_conds[i] = malloc(sizeof(pthread_cond_t));
-        if (sched_ctx->completation_conds[i] == NULL) {
-            return -1;
-        }
-        pthread_cond_init(sched_ctx->completation_conds[i], NULL);
-    }
+    // sched_ctx->completation_conds =
+    //     malloc(sizeof(pthread_cond_t*) * max_current);
+    // if (sched_ctx->completation_conds == NULL) {
+    //     return -1;
+    // }
+    // for (int i = 0; i < max_current; i++) {
+    //     sched_ctx->completation_conds[i] = malloc(sizeof(pthread_cond_t));
+    //     if (sched_ctx->completation_conds[i] == NULL) {
+    //         return -1;
+    //     }
+    //     pthread_cond_init(sched_ctx->completation_conds[i], NULL);
+    // }
 
-    sched_ctx->ctx_mutex = malloc(sizeof(pthread_mutex_t*) * max_current);
-    if (sched_ctx->ctx_mutex == NULL) {
-        return -1;
-    }
-    for (int i = 0; i < max_current; i++) {
-        sched_ctx->ctx_mutex[i] = malloc(sizeof(pthread_mutex_t));
-        if (sched_ctx->ctx_mutex[i] == NULL) {
-            return -1;
-        }
-        pthread_mutex_init(sched_ctx->ctx_mutex[i], NULL);
-    }
+    // sched_ctx->ctx_mutex = malloc(sizeof(pthread_mutex_t*) * max_current);
+    // if (sched_ctx->ctx_mutex == NULL) {
+    //     return -1;
+    // }
+    // for (int i = 0; i < max_current; i++) {
+    //     sched_ctx->ctx_mutex[i] = malloc(sizeof(pthread_mutex_t));
+    //     if (sched_ctx->ctx_mutex[i] == NULL) {
+    //         return -1;
+    //     }
+    //     pthread_mutex_init(sched_ctx->ctx_mutex[i], NULL);
+    // }
 
-    sched_ctx->schedule_queue_lock = malloc(sizeof(pthread_mutex_t));
-    if (sched_ctx->schedule_queue_lock == NULL) {
-        return -1;
-    }
-    pthread_spin_init(sched_ctx->schedule_queue_lock, 1);
+    // sched_ctx->schedule_queue_lock = malloc(sizeof(pthread_mutex_t));
+    // if (sched_ctx->schedule_queue_lock == NULL) {
+    //     return -1;
+    // }
+    // pthread_spin_init(sched_ctx->schedule_queue_lock, 1);
 
     ssd_info = mix_ssd_worker_init(size, esize);
     if (ssd_info == NULL) {
+        return -1;
+    }
+
+    buffer_info = mix_buffer_worker_init(size, esize);
+    if (buffer_info == NULL) {
         return -1;
     }
 
@@ -215,10 +238,7 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
         return -1;
     }
 
-    buffer_info = mix_buffer_init(size, esize);
-    if (buffer_info == NULL) {
-        return -1;
-    }
+    mix_nvm_mmap(nvm_info, buffer_info);
 
     sched_ctx->ssd_info = ssd_info;
     sched_ctx->nvm_info = nvm_info;

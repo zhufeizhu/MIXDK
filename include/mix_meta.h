@@ -33,9 +33,9 @@ typedef struct mix_metadata {
     free_segment_t segments[SEGMENT_NUM];  //四个free_segment
 } mix_metadata_t;
 
-mix_metadata_t* mix_init_metadata(uint32_t block_num);
+mix_metadata_t* mix_metadata_init(uint32_t block_num);
 
-void mix_free_metadata(mix_metadata_t* meta_data);
+void mix_metadata_free(mix_metadata_t* meta_data);
 
 int mix_get_next_free_block(mix_metadata_t* meta_data, int idx);
 

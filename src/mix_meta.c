@@ -28,7 +28,7 @@ static bool mix_free_segment_init(free_segment_t* segment, uint32_t size) {
  *全局的free_segment等
  *
  **/
-mix_metadata_t* mix_init_metadata(uint32_t block_num) {
+mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     pthread_t pid;
     mix_metadata_t* meta_data = malloc(sizeof(mix_metadata_t));
     if (meta_data == NULL) {
@@ -72,7 +72,7 @@ void mix_free_free_segment(free_segment_t* segment) {
  *
  * @param meta_data
  */
-void mix_free_metadata(mix_metadata_t* meta_data) {
+void mix_metadata_free(mix_metadata_t* meta_data) {
     for (int i = 0; i < SEGMENT_NUM; i++) {
         mix_free_free_segment(&(meta_data->segments[i]));
         mix_hash_free(meta_data->hash[i]);

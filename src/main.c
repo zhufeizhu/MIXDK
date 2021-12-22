@@ -9,7 +9,9 @@
 int thread_num = 0;
 int task_num = 0;
 
-size_t offset = (size_t)0;  // 128 * 1024 * 1024 * 1024;
+size_t nvm_block_num = (size_t)(16) * 1024 * 1024;
+
+size_t offset = 0;  //
 
 #define BUF_SIZE 4096
 
@@ -21,7 +23,7 @@ void* write_func(void* arg) {
     for (size_t i = idx; i < task_num; i += thread_num) {
         // if(i > 500000)
         // printf("[%d]:task offset is %llu\n",idx,offset + BUF_SIZE * i);
-        mixdk_write(buf1, 1, offset + i, flags, i);
+        mixdk_write(buf1, 1, nvm_block_num + i, flags, i);
         // printf("finish %d\n",i);
     }
     // printf("over\n");
@@ -32,7 +34,12 @@ int main(int argc, char** argv) {
     thread_num = atoi(argv[1]);
     task_num = atoi(argv[2]);
     char c = argv[3][0];
+    printf("mix begin init\n");
+
     mixdk_init();
+
+    printf("mix end init\n");
+
     printf("%c\n", c);
 
     memset(buf1, c, BUF_SIZE);

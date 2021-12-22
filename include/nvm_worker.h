@@ -7,11 +7,15 @@
 
 #include <stdatomic.h>
 
-nvm_info_t* mix_nvm_worker_init(unsigned int, unsigned int);
+nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize);
 
-int mix_post_task_to_nvm(io_task_t*);
+buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize);
 
-int mix_post_task_to_buffer(io_task_t*);
+void mix_nvm_mmap(nvm_info_t* nvm_info, buffer_info_t* buffer_info);
+
+int mix_post_task_to_nvm(io_task_t* task);
+
+int mix_post_task_to_buffer(io_task_t* task);
 
 atomic_int mix_get_completed_nvm_task_num();
 

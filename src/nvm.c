@@ -18,6 +18,38 @@
 static nvm_info_t* nvm_info;
 static buffer_info_t* buffer_info;
 
+void mix_nvm_free(nvm_info_t* nvm_info) {
+    if (nvm_info == NULL)
+        return;
+    free(nvm_info);
+}
+
+void mix_buffer_free(buffer_info_t* buffer_info) {
+    if (buffer_info == NULL)
+        return;
+    free(buffer_info);
+}
+
+void mix_mmap(nvm_info_t* nvm_info, buffer_info_t* buffer_info) {
+    int raw_nvm_fd = open("/dev/pmem0", O_RDWR);
+    void* mmap_addr =
+        mmap(NULL, nvm_info->nvm_capacity + buffer_info->buffer_capacity,
+             PROT_READ | PROT_WRITE, MAP_SHARED, raw_nvm_fd, 0);
+
+    if (mmap_addr == MAP_FAILED) {
+        mix_log("mix_mmap", "mmap pmem0 failed");
+        mix_buffer_free(buffer_info);
+        mix_nvm_free(nvm_info);
+        return;
+    }
+
+    nvm_info->nvm_addr = mmap_addr;
+    buffer_info->meta_addr = mmap_addr + nvm_info->nvm_capacity;
+    buffer_info->buffer_addr =
+        buffer_info->meta_addr + buffer_info->block_num * sizeof(buffer_meta_t);
+    return;
+}
+
 nvm_info_t* mix_nvm_init() {
     nvm_info = malloc(sizeof(nvm_info_t));
     if (nvm_info == NULL) {
@@ -26,19 +58,11 @@ nvm_info_t* mix_nvm_init() {
     }
 
     nvm_info->block_size = 4096;
-    nvm_info->nvm_capacity = (size_t)64 * 1024 * 1024 * 1024;  // nvm 64G
     nvm_info->block_num = 16 * 1024 * 1024;
-
-    int raw_nvm_fd = open("/dev/pmem0", O_RDWR);
-    nvm_info->nvm_addr =
-        mmap(NULL, nvm_info->nvm_capacity, PROT_READ | PROT_WRITE, MAP_SHARED,
-             raw_nvm_fd, 0);
-    if (nvm_info->nvm_addr == MAP_FAILED) {
-        mix_log("mix_nvm_init", "mmap for nvm info failed");
-        close(raw_nvm_fd);
-        free(nvm_info);
-        return NULL;
-    }
+    nvm_info->per_block_num = nvm_info->block_num / nvm_info->queue_num;
+    nvm_info->nvm_capacity = nvm_info->block_num * BLOCK_SIZE;  // nvm 64G
+    nvm_info->queue_num = 4;
+    nvm_info->nvm_addr = NULL;
     return nvm_info;
 }
 
@@ -52,18 +76,8 @@ buffer_info_t* mix_buffer_init() {
     buffer_info->block_num = 4 * 1024;  //总共分成4块 一块有空间 一共占用16m
     buffer_info->buffer_capacity =
         (size_t)buffer_info->block_num * (4096 + sizeof(buffer_meta_t));
-    int raw_nvm_fd = open("/dev/pmem0", O_RDWR);
-    buffer_info->meta_addr =
-        mmap(NULL, buffer_info->buffer_capacity, PROT_READ | PROT_WRITE,
-             MAP_SHARED, raw_nvm_fd, nvm_info->nvm_capacity);
-    if (buffer_info->buffer_addr == MAP_FAILED) {
-        mix_log("mix_buffer_init", "mmap for buffer failed");
-        close(raw_nvm_fd);
-        free(buffer_info);
-        return NULL;
-    }
-    buffer_info->buffer_addr =
-        buffer_info->meta_addr + buffer_info->block_num * sizeof(buffer_meta_t);
+    buffer_info->meta_addr = NULL;
+    buffer_info->buffer_addr = NULL;
     return buffer_info;
 }
 
@@ -119,14 +133,15 @@ static inline void mix_flush(const void* addr, size_t len) {
 
 size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
     size_t l = 0;
-    if ((len + offset) > nvm_info->nvm_capacity) {
-        l = nvm_info->nvm_capacity - offset;
+    if ((len + offset) > nvm_info->block_num) {
+        l = nvm_info->block_num - offset;
     } else {
         l = len;
     }
 
     //_mm_lfence();
-    mix_ntstorenx32(dst, nvm_info->nvm_addr + offset, l);
+    mix_ntstorenx32(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
+                    l * BLOCK_SIZE);
     // printf("[len] %d [offset] %d\n",l,offset);
 
     return l;
@@ -136,13 +151,14 @@ size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     size_t l = 0;
-    if ((len + offset) > nvm_info->nvm_capacity) {
-        l = nvm_info->nvm_capacity - offset;
+    if ((len + offset) > nvm_info->block_num) {
+        l = nvm_info->block_num - offset;
     } else {
         l = len;
     }
     //_mm_sfence();
-    mix_ntstorenx32(nvm_info->nvm_addr + offset, src, l);
+    mix_ntstorenx32(nvm_info->nvm_addr + offset * BLOCK_SIZE, src,
+                    l * BLOCK_SIZE);
 
     // printf("nvm task local time is %d\n",local_time++);
     // printf("[%d]:[len] %d [offset] %d\n",local_time++,l,offset);

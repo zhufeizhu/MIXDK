@@ -211,10 +211,9 @@ static void nvm_worker(void* arg) {
         else
             task = get_task_from_buffer_queue(idx);
 
+        seq++;
         if (task == NULL)
             continue;
-        else
-            seq++;
 
         size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
         if (task->type == NVM_TASK) {
@@ -295,23 +294,27 @@ nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize) {
     return nvm_info;
 }
 
-buffer_info_t* mix_init_buffer(unsigned int size, unsigned int esize) {
+buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize) {
     buffer_info_t* buffer_info = NULL;
     if ((buffer_info = mix_buffer_init()) == NULL) {
         return NULL;
     }
 
-    meta_data = mix_init_metadata(buffer_info->block_num);
+    meta_data = mix_metadata_init(buffer_info->block_num);
     if (meta_data == NULL) {
     }
 
     buffer_queue = mix_queue_init(size, esize);
     if (buffer_queue == NULL) {
-        mix_free_metadata(meta_data);
+        mix_metadata_free(meta_data);
         return NULL;
     }
 
     return buffer_info;
+}
+
+inline void mix_nvm_mmap(nvm_info_t* nvm_info, buffer_info_t* buffer_info) {
+    mix_mmap(nvm_info, buffer_info);
 }
 
 int pre_nvm_ind = 0;
