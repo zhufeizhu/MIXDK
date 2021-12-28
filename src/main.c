@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
                 // if(retry_time > 3) break;
             }
             pre_task_num = current_task_num;
-            sleep(1);
+            //sleep(1);
         }
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);

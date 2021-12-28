@@ -43,7 +43,7 @@ mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        meta_data->hash[i] = mix_hash_init(20);
+        meta_data->hash[i] = mix_hash_init(80);
         meta_data->bloom_filter[i] =
             mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
         if (!mix_free_segment_init(&(meta_data->segments[i]),
@@ -91,6 +91,9 @@ int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
     if (meta_data->segments[idx].migration) {
         return -1;
     }
+
+    if(meta_data->segments[idx].used_block_num == meta_data->per_block_num) return -1;
+
     //从free_segment中申请空闲块
     return idx * meta_data->per_block_num +
            mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
@@ -112,7 +115,7 @@ bool mix_write_redirect_block(mix_metadata_t* meta_data,
                               int bit) {
     uint32_t value = bit + idx * meta_data->per_block_num;
     //将对应的bitmap设置为dirty
-    if (!mix_bitmap_set_bit(bit, meta_data->segments[idx].bitmap)) {
+    if (!mix_bitmap_set_bit(meta_data->segments[idx].bitmap,bit)) {
         return false;
     }
 
@@ -161,7 +164,7 @@ void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
 
             //将对应的bitmap设置为clean
             int bit = value % meta_data->per_block_num;
-            mix_bitmap_clear_bit(bit, meta_data->segments[j].bitmap);
+            mix_bitmap_clear_bit(meta_data->segments[j].bitmap, bit);
             meta_data->segments[j].used_block_num--;
             break;
         }
@@ -187,7 +190,7 @@ int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset) {
         }
 
         int bit = value % meta_data->per_block_num;
-        if (!mix_bitmap_test_bit(bit, meta_data->segments[i].bitmap)) {
+        if (!mix_bitmap_test_bit(meta_data->segments[i].bitmap, bit)) {
             value = -1;
             continue;
         }
@@ -207,7 +210,11 @@ inline bool mix_in_migration(mix_metadata_t* meta_data, int idx) {
     return meta_data->segments[idx].migration = true;
 }
 
-void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {}
+void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
+    char buf[4096];
+    mix_buffer_read(buf,src,0);
+    mix_ssd_write(buf,dst,1,0);
+}
 
 /**
  * @brief 将指定idx中buffer的数据迁入到ssd中
@@ -220,6 +227,9 @@ void mix_migrate(mix_metadata_t* meta_data, int idx) {
         if (kv.key == (uint32_t)-1 && kv.value == (uint32_t)-1)
             continue;
         migrate_from_buffer_to_ssd(kv.value, kv.key);
+        mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
+        mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, kv.value);
+        meta_data->segments[idx].used_block_num--;
     }
 }
 

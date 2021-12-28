@@ -19,11 +19,11 @@ typedef struct {
 //常规的bitmap 用在记录fragment中的block是否被使用
 mix_bitmap_t* mix_bitmap_init(int size);
 
-int mix_bitmap_set_bit(int nr, mix_bitmap_t* bitmap);
+int mix_bitmap_set_bit(mix_bitmap_t* bitmap, int nr);
 
-int mix_bitmap_clear_bit(int nr, mix_bitmap_t* bitmap);
+int mix_bitmap_clear_bit(mix_bitmap_t* bitmap, int nr);
 
-int mix_bitmap_test_bit(int nr, mix_bitmap_t* bitmap);
+int mix_bitmap_test_bit(mix_bitmap_t* bitmap, int nr);
 
 int mix_bitmap_free(mix_bitmap_t* bitmap);
 

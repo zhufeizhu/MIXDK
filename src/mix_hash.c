@@ -272,14 +272,14 @@ mix_kv_t mix_hash_get_entry(mix_hash_t* hash) {
     kv.key = -1;
     kv.value = -1;
     while (1) {
-        hash_node_t hash_node = hash->hash_nodes[hash->hash_node_entry_idx];
-        if (hash_node.len > 0) {
-            kv.key = hash_node.list->key;
-            kv.value = hash_node.list->value;
-            hash_list_node_t* list_node = hash_node.list->next;
-            free(hash_node.list);
-            hash_node.list = list_node;
-            hash_node.len--;
+        hash_node_t* hash_node = &(hash->hash_nodes[hash->hash_node_entry_idx]);
+        if (hash_node->len > 0) {
+            kv.key = hash_node->list->key;
+            kv.value = hash_node->list->value;
+            hash_list_node_t* list_node = hash_node->list->next;
+            free(hash_node->list);
+            hash_node->list = list_node;
+            hash_node->len--;
             break;
         } else {
             if (hash->hash_node_entry_idx++ == hash->hash_size) {

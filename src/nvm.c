@@ -59,9 +59,9 @@ nvm_info_t* mix_nvm_init() {
 
     nvm_info->block_size = 4096;
     nvm_info->block_num = 16 * 1024 * 1024;
+    nvm_info->queue_num = 4;
     nvm_info->per_block_num = nvm_info->block_num / nvm_info->queue_num;
     nvm_info->nvm_capacity = nvm_info->block_num * BLOCK_SIZE;  // nvm 64G
-    nvm_info->queue_num = 4;
     nvm_info->nvm_addr = NULL;
     return nvm_info;
 }

@@ -88,6 +88,7 @@ static inline io_task_t* handle_task(io_task_t* task) {
 
     //当前task的offset都在ssd的范围内
     if ((size_t)task->offset >= sched_ctx->nvm_info->block_num) {
+        task->type = SSD_TASK;
         return NULL;
     }
 

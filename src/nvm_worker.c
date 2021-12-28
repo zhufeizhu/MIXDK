@@ -87,13 +87,12 @@ io_task_t* get_task_from_nvm_queue(int idx) {
 }
 
 io_task_t* get_task_from_buffer_queue(int idx) {
-    while (mix_segment_migrating(meta_data, idx))
-        ;
-
-    pthread_mutex_lock(&mutex);
+    if(pthread_mutex_trylock(&mutex)){
+        return NULL;
+    }
     int len = mix_dequeue(buffer_queue, &buffer_task, 1);
-    pthread_mutex_unlock(&mutex);
     if (len == 0) {
+        pthread_mutex_unlock(&mutex);
         return NULL;
     } else {
         return &buffer_task;
@@ -144,6 +143,7 @@ static size_t redirect_read(io_task_t* task, int idx) {
  * @return int
  */
 static int redirect_write(io_task_t* task, int idx) {
+    idx = 0;
     //将所有要写的ssd的数据都删除 然后将任务转发到ssd中
     if (task->len <= threshold) {
         int offset = mix_buffer_block_test(meta_data, task->offset);
@@ -158,7 +158,7 @@ static int redirect_write(io_task_t* task, int idx) {
                 //迁移后重新获取重定向的地址
                 offset = mix_get_next_free_block(meta_data, idx);
             }
-
+            mix_write_redirect_block(meta_data,idx,task->offset,offset);
             mix_write_to_buffer(task->buf, task->offset, offset, task->opcode);
         }
     } else {
@@ -177,20 +177,7 @@ static int redirect_write(io_task_t* task, int idx) {
  */
 void mix_migrate_segment(int idx) {
     int segment_idx = idx;
-
     mix_segment_migration_begin(meta_data, segment_idx);
-    //将buffer_queue中的所有任务执行完毕
-    while (mix_dequeue(buffer_queue, &migrate_task, 1)) {
-        size_t op_code = migrate_task.opcode & (MIX_READ | MIX_WRITE);
-        if (op_code == MIX_READ) {
-            redirect_read(&migrate_task, idx);
-        } else if (op_code == MIX_WRITE) {
-            while (!mix_has_free_block(meta_data, (idx++) % SEGMENT_NUM))
-                ;
-            redirect_write(&migrate_task, idx);
-        }
-    }
-
     //等待ssd_queue中的所有任务执行完毕
     while (!mix_ssd_queue_is_empty())
         ;
@@ -237,17 +224,22 @@ static void nvm_worker(void* arg) {
             switch (op_code) {
                 case MIX_READ: {
                     ret = redirect_read(task, idx);
+                    pthread_mutex_unlock(&mutex);
                     break;
                 }
                 case MIX_WRITE: {
+                    printf("redirect_write\n");
                     ret = redirect_write(task, idx);
+                    pthread_mutex_unlock(&mutex);
                     break;
                 }
                 default: {
                     ret = 0;
+                    pthread_mutex_unlock(&mutex);
                     break;
                 }
             }
+            
         }
         task->ret += ret;
         mix_nvm_task_completed(task);
@@ -328,7 +320,7 @@ int retry_time = 0;
 int mix_post_task_to_nvm(io_task_t* task) {
     int l = 0;
     while (l == 0) {
-        if (task->queue_idx > 0) {
+        if (task->queue_idx >= 0) {
             l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
         } else {
             l = mix_enqueue(nvm_queue[pre_nvm_ind], task, 1);

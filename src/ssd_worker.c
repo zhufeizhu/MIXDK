@@ -47,9 +47,11 @@ static inline void mix_ssd_task_completed(io_task_t* task) {
 io_task_t* get_task_from_ssd_queue() {
     int len = mix_dequeue(ssd_queue, &ssd_task, 1);
     if (len) {
-        queue_empty = true;
-    } else {
         queue_empty = false;
+        return &ssd_task;
+    } else {
+        queue_empty = true;
+        return NULL;
     }
 }
 
@@ -58,7 +60,7 @@ static void ssd_worker(void* arg) {
     int ret = 0;
     io_task_t* task = NULL;
     while (1) {
-        len = mix_dequeue(ssd_queue, task, 1);
+       task = get_task_from_ssd_queue();
         if (!len) {
             continue;
         }
