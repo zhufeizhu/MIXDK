@@ -1,7 +1,9 @@
 #include "ssd.h"
 
+#define __USE_GNU 1
 #include <fcntl.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -14,7 +16,7 @@ ssd_info_t* mix_ssd_init() {
     ssd_info = malloc(sizeof(ssd_info_t));
     ssd_info->block_num = 1024 * 1024 * 1024;
     ssd_info->block_size = SSD_BLOCK_SIZE;
-    ssd_info->ssd_fd = open("/dev/sdb", O_RDWR);
+    ssd_info->ssd_fd = open("/dev/sdb", O_RDWR|O_DIRECT);
     if (ssd_info->ssd_fd < 0) {
         free(ssd_info);
         perror("mix_ssd_init");
@@ -30,8 +32,11 @@ size_t mix_ssd_read(void* dst, size_t len, size_t offset, size_t flags) {
         l = ssd_info->ssd_capacity - offset;
     }
 
-    int n = pread(ssd_info->ssd_fd, dst, l * SSD_BLOCK_SIZE,
+    char* memalign_dst = valloc(l*SSD_BLOCK_SIZE);
+    int n = pread(ssd_info->ssd_fd, memalign_dst, l * SSD_BLOCK_SIZE,
                   offset * SSD_BLOCK_SIZE);
+    memcpy(dst,memalign_dst,l*SSD_BLOCK_SIZE);
+    free(memalign_dst);
     if (n <= 0) {
         perror("mix_ssd_read");
         return 0;
@@ -47,10 +52,14 @@ size_t mix_ssd_write(void* src, size_t len, size_t offset, size_t flag) {
         l = ssd_info->block_num - offset;
     }
 
-    int n = pwrite(ssd_info->ssd_fd, src, l * SSD_BLOCK_SIZE,
-                   offset * SSD_BLOCK_SIZE);
-    // printf("mix ssd write: len:%llu, offset:%llu\n",len,offset);
+    char* memalign_src = valloc(l*SSD_BLOCK_SIZE);
+    memcpy(memalign_src,src,l*SSD_BLOCK_SIZE);
 
+    int n = pwrite(ssd_info->ssd_fd, memalign_src, l * SSD_BLOCK_SIZE,
+                   offset * SSD_BLOCK_SIZE);
+    //printf("mix ssd write: len:%llu, offset:%llu\n",len,offset);
+
+    free(memalign_src);
     if (n <= 0) {
         perror("mix_ssd_write");
         return 0;

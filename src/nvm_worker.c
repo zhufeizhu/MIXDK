@@ -12,14 +12,14 @@
 #define NVM_QUEUE_NUM 4
 #define BLOCK_SZIE 4096
 
-static const int threshold = 4096;
+static const int threshold = 1;
 static mix_queue_t** nvm_queue = NULL;
 static mix_queue_t* buffer_queue = NULL;
 static mix_metadata_t* meta_data = NULL;
 
 static io_task_t migrate_task;
-static io_task_t nvm_task;
-static io_task_t buffer_task;
+static io_task_t nvm_task[NVM_QUEUE_NUM];
+static io_task_t buffer_task[NVM_QUEUE_NUM];
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -65,12 +65,16 @@ static inline size_t mix_write_to_buffer(void* dst,
 }
 
 static inline void mix_nvm_task_completed(io_task_t* task) {
-    completed_nvm_task_num++;
+    if(task->len == task->ret){
+        completed_nvm_task_num++;
+        return;
+    }
+    
     // if(completed_nvm_task_num > 500000) printf("completed nvm task num is
     // %d\n",completed_nvm_task_num);
-    if (task->flag == NULL)
-        return;
-    atomic_store(task->flag, true);
+    //if (task->flag == NULL)
+    //return;
+    //atomic_store(task->flag, true);
 }
 
 atomic_int mix_get_completed_nvm_task_num() {
@@ -78,11 +82,11 @@ atomic_int mix_get_completed_nvm_task_num() {
 }
 
 io_task_t* get_task_from_nvm_queue(int idx) {
-    int len = mix_dequeue(nvm_queue[idx], &nvm_task, 1);
+    int len = mix_dequeue(nvm_queue[idx], &nvm_task[idx], 1);
     if (len == 0) {
         return NULL;
     } else {
-        return &nvm_task;
+        return &nvm_task[idx];
     }
 }
 
@@ -90,12 +94,12 @@ io_task_t* get_task_from_buffer_queue(int idx) {
     if(pthread_mutex_trylock(&mutex)){
         return NULL;
     }
-    int len = mix_dequeue(buffer_queue, &buffer_task, 1);
+    int len = mix_dequeue(buffer_queue, &buffer_task[idx], 1);
     if (len == 0) {
         pthread_mutex_unlock(&mutex);
         return NULL;
     } else {
-        return &buffer_task;
+        return &buffer_task[idx];
     }
 }
 
@@ -153,19 +157,23 @@ static int redirect_write(io_task_t* task, int idx) {
             if (offset == -1) {
                 //表明当前segment已经满了
                 //需要将当前segment进行迁移
+                printf("migrate begin\n");
                 mix_migrate_segment(idx);
-
+                printf("migrate end\n");
                 //迁移后重新获取重定向的地址
                 offset = mix_get_next_free_block(meta_data, idx);
             }
             mix_write_redirect_block(meta_data,idx,task->offset,offset);
             mix_write_to_buffer(task->buf, task->offset, offset, task->opcode);
+            return task->len;
         }
     } else {
         //将当前task中包含的元数据都清空
         //然后将数据异步的转发到ssd的queue中
+        //printf("post task to ssd\n");
         mix_post_task_to_ssd(task);
         mix_clear_blocks(meta_data, task);
+        return 0;
     }
 }
 
@@ -176,6 +184,7 @@ static int redirect_write(io_task_t* task, int idx) {
  * @param idx 需要执行迁移的segment的下标
  */
 void mix_migrate_segment(int idx) {
+    idx = 0;
     int segment_idx = idx;
     mix_segment_migration_begin(meta_data, segment_idx);
     //等待ssd_queue中的所有任务执行完毕
@@ -228,8 +237,9 @@ static void nvm_worker(void* arg) {
                     break;
                 }
                 case MIX_WRITE: {
-                    printf("redirect_write\n");
+                    //printf("redirect_write\n");
                     ret = redirect_write(task, idx);
+                    //printf("redirect ret is %d\n",ret);
                     pthread_mutex_unlock(&mutex);
                     break;
                 }
@@ -241,11 +251,13 @@ static void nvm_worker(void* arg) {
             }
             
         }
-        task->ret += ret;
-        mix_nvm_task_completed(task);
+        //printf("task ret is %ld\n",task->ret);
+        //printf("1.ret is %d and task ret is %ld\n",ret,task->ret);
+        task->ret = task->ret + ret;
+        //printf("task ret is %ld\n",task->ret);
+        //printf("2.ret is %d and task ret is %ld\n",ret,task->ret);
+        mix_nvm_task_completed(task); 
     }
-    // impossible run here
-    free(task);
     return;
 }
 

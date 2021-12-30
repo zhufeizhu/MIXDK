@@ -147,7 +147,7 @@ size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
     return l;
 }
 
-// static size_t local_time = 0;
+static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     size_t l = 0;
@@ -156,11 +156,11 @@ size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     } else {
         l = len;
     }
-    //_mm_sfence();
-    mix_ntstorenx32(nvm_info->nvm_addr + offset * BLOCK_SIZE, src,
-                    l * BLOCK_SIZE);
+    // //_mm_sfence();
+    // mix_ntstorenx32(nvm_info->nvm_addr + offset * BLOCK_SIZE, src,
+    //                 l * BLOCK_SIZE);
 
-    // printf("nvm task local time is %d\n",local_time++);
+    // printf("nvm task local time is %lld\n",local_time++);
     // printf("[%d]:[len] %d [offset] %d\n",local_time++,l,offset);
 
     return l;

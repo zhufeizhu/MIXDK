@@ -10,13 +10,14 @@
 #include "mix_hash.h"
 #include "mix_task.h"
 
-#define SEGMENT_NUM 4
+#define SEGMENT_NUM 1
 
 typedef struct free_segment {
     size_t size;                         //当前segment的总体的大小
     uint32_t block_num;                  //当前segment的block的个数
     atomic_bool migration;               //是否在执行迁移动作
     atomic_int_fast32_t used_block_num;  //当前segment被使用的block的个数
+    pthread_rwlock_t* segment_lock;
     // atomic_bool migration;               //是否正在迁移数据
     mix_bitmap_t* bitmap;  //描述当前segment的bitmap信息
 } free_segment_t;

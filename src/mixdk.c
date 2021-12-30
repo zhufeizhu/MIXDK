@@ -27,6 +27,7 @@ size_t mixdk_write(void* src,
     task->len = len;
     task->offset = offset;
     task->opcode = MIX_WRITE | flags;
+    task->ret = 0;
     // task->task_index = idx;
     // task->flag = NULL;
 
@@ -51,6 +52,7 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx) {
     task->opcode = MIX_READ | flags;
     atomic_bool read_finish_flag = false;
     task->flag = &read_finish_flag;
+    task->ret = 0;
 
     int ind = mix_post_task_to_io(task);
     if (ind < 0) {

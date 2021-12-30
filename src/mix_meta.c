@@ -20,6 +20,9 @@ static bool mix_free_segment_init(free_segment_t* segment, uint32_t size) {
     segment->bitmap = mix_bitmap_init(size / BLOCK_SIZE);
     segment->block_num = size / BLOCK_SIZE;
     segment->size = size;
+    segment->used_block_num = 0;
+    segment->segment_lock = malloc(sizeof(pthread_rwlock_t));
+    pthread_rwlock_init(segment->segment_lock,NULL);
     return true;
 };
 
@@ -43,7 +46,7 @@ mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        meta_data->hash[i] = mix_hash_init(80);
+        meta_data->hash[i] = mix_hash_init(100);
         meta_data->bloom_filter[i] =
             mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
         if (!mix_free_segment_init(&(meta_data->segments[i]),

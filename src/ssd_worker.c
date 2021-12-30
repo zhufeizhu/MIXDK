@@ -55,16 +55,19 @@ io_task_t* get_task_from_ssd_queue() {
     }
 }
 
+atomic_int_fast32_t ssd_task_num = 0;
+
 static void ssd_worker(void* arg) {
     int len = 0;
     int ret = 0;
     io_task_t* task = NULL;
     while (1) {
        task = get_task_from_ssd_queue();
-        if (!len) {
+        if (task == NULL) {
+            //printf("empty task\n");
             continue;
         }
-
+        //printf("ssd task %ld\n",ssd_task_num++);
         size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
 
         switch (op_code) {
@@ -86,7 +89,7 @@ static void ssd_worker(void* arg) {
         }
         task->ret = ret;
         mix_ssd_task_completed(task);
-        free(task);
+        //free(task);
     }
     return;
 }

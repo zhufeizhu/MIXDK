@@ -23,7 +23,7 @@ typedef struct io_task {
     char* buf;      //存放读写的数据
     size_t len;     //读写数据的长度
     size_t offset;  //读写数据的偏移
-    size_t ret;     //读写的结果
+    atomic_int_fast32_t ret;     //读写的结果
     size_t opcode;  //读写的操作码
     // size_t task_index;//
     __uint8_t type;  //读写的类型 如对NVM的读写还是对SSD的读写

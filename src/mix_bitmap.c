@@ -64,7 +64,7 @@ int mix_bitmap_next_zero_bit(mix_bitmap_t* bitmap) {
             return -1;
         }
     } else {
-        while (!mix_bitmap_test_bit(bitmap, next_zero_bit)) {
+        while (mix_bitmap_test_bit(bitmap, next_zero_bit)) {
             next_zero_bit = (next_zero_bit + 1) % (bitmap->bytes * BITS_PER_BYTE);
         }
         if (!mix_bitmap_set_bit(bitmap,next_zero_bit)) {
