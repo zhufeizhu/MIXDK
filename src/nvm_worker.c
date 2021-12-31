@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "mix_meta.h"
 #include "nvm.h"
@@ -68,6 +69,8 @@ static inline void mix_nvm_task_completed(io_task_t* task) {
     if(task->len == task->ret){
         completed_nvm_task_num++;
         return;
+    }else{
+        printf("not equal\n");
     }
     
     // if(completed_nvm_task_num > 500000) printf("completed nvm task num is
@@ -193,6 +196,11 @@ void mix_migrate_segment(int idx) {
     mix_migrate(meta_data, segment_idx);
     mix_segment_migration_end(meta_data, segment_idx);
 }
+atomic_int empty_num = 0;
+
+static struct timespec start, end;
+
+char* buf = NULL;
 
 static void nvm_worker(void* arg) {
     int idx = *(int*)arg;  //当前线程对应的队列序号
@@ -208,9 +216,13 @@ static void nvm_worker(void* arg) {
             task = get_task_from_buffer_queue(idx);
 
         seq++;
-        if (task == NULL)
-            continue;
-
+        if (task == NULL){
+            // if(idx == 0 && start == 1){
+            //     printf("emtpy task num is %d\n",empty_num++);
+            // }
+            continue; 
+        }
+    
         size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
         if (task->type == NVM_TASK) {
             switch (op_code) {
@@ -323,7 +335,7 @@ inline void mix_nvm_mmap(nvm_info_t* nvm_info, buffer_info_t* buffer_info) {
 
 int pre_nvm_ind = 0;
 
-int retry_time = 0;
+static atomic_int retry_time = 0;
 
 /**
  * task入队到nvm_queue中 nvm_queue的个数在编译器确定
@@ -331,13 +343,11 @@ int retry_time = 0;
  **/
 int mix_post_task_to_nvm(io_task_t* task) {
     int l = 0;
-    while (l == 0) {
-        if (task->queue_idx >= 0) {
-            l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
-        } else {
-            l = mix_enqueue(nvm_queue[pre_nvm_ind], task, 1);
-            pre_nvm_ind = (pre_nvm_ind + 1) % NVM_QUEUE_NUM;
-        }
+    while (l == 0) {    
+       l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
+       //l = mix_enqueue(nvm_queue[0], task, 1);
+            //if(l == 0){
+                //printf("retry time is %d\n",retry_time++);
     }
     return l;
 }

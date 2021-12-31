@@ -132,38 +132,30 @@ static inline void mix_flush(const void* addr, size_t len) {
 }
 
 size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
-    size_t l = 0;
-    if ((len + offset) > nvm_info->block_num) {
-        l = nvm_info->block_num - offset;
-    } else {
-        l = len;
-    }
-
+    // size_t l = 0;
+    // if ((len + offset) > nvm_info->block_num) {
+    //     l = nvm_info->block_num - offset;
+    // } else {
+    //     l = len;
+    // }
     //_mm_lfence();
     mix_ntstorenx32(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
-                    l * BLOCK_SIZE);
+                    len * BLOCK_SIZE);
     // printf("[len] %d [offset] %d\n",l,offset);
 
-    return l;
+    return len;
 }
 
 static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
-    size_t l = 0;
-    if ((len + offset) > nvm_info->block_num) {
-        l = nvm_info->block_num - offset;
-    } else {
-        l = len;
-    }
-    // //_mm_sfence();
-    // mix_ntstorenx32(nvm_info->nvm_addr + offset * BLOCK_SIZE, src,
-    //                 l * BLOCK_SIZE);
-
+    //printf("write %lld task\n",local_time++);
+    mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
+    //memcpy(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
     // printf("nvm task local time is %lld\n",local_time++);
     // printf("[%d]:[len] %d [offset] %d\n",local_time++,l,offset);
 
-    return l;
+    return len;
 }
 
 size_t mix_buffer_read(void* src, size_t dst_block, size_t flags) {

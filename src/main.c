@@ -20,12 +20,17 @@ char buf1[BUF_SIZE];
 void* write_func(void* arg) {
     int idx = *(int*)arg;
     size_t flags = MIX_SYNC;
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (size_t i = idx; i < task_num; i += thread_num) {
         // if(i > 500000)
         // printf("[%d]:task offset is %llu\n",idx,offset + BUF_SIZE * i);
         mixdk_write(buf1, 1, i, flags, i);
         //printf("finish %lld\n",i);
     }
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    printf("time %d is %lu us\n", idx, (end.tv_sec - start.tv_sec) * 1000000 +
+                                   (end.tv_nsec - start.tv_nsec) / 1000);
     // printf("over\n");
     return NULL;
 }
@@ -48,7 +53,7 @@ int main(int argc, char** argv) {
 
     int* idx = (int*)malloc(sizeof(int) * thread_num);
     for (int i = 0; i < thread_num; i++) {
-        idx[i] = i;
+        idx[i] = 0;
         if (pthread_create(pids + i, NULL, write_func, (void*)(idx + i))) {
             perror("create thread");
             return 0;
@@ -59,22 +64,50 @@ int main(int argc, char** argv) {
     int pre_task_num = 0;
     int current_task_num = 0;
     int retry_time = 0;
-    pthread_join(pids[0],NULL);
-    // while (1) {
-    //     current_task_num = mix_completed_task_num();
-    //     if (current_task_num == task_num)
-    //         break;
-    //     else {
-    //         if (pre_task_num == current_task_num) {
-    //             retry_time++;
-    //             //printf("main retry time is %d and task num is %d\n", retry_time,
-    //                    //current_task_num);
-    //             // if(retry_time > 3) break;
-    //         }
-    //         pre_task_num = current_task_num;
-    //         //sleep(1);
-    //     }
-    // }
+    while (1) {
+        current_task_num = mix_completed_task_num();
+        if (current_task_num == task_num)
+            break;
+        else {
+            if (pre_task_num == current_task_num) {
+                retry_time++;
+                //printf("main retry time is %d and task num is %d\n", retry_time,
+                       //current_task_num);
+                // if(retry_time > 3) break;
+            }
+            pre_task_num = current_task_num;
+            //sleep(1);
+        }
+    }
+    printf("current task num is %d\n",current_task_num);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    printf("time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
+                                   (end.tv_nsec - start.tv_nsec) / 1000);
+    // pthread_join(pids[0],NULL);
+    memset(buf1, c+1, BUF_SIZE);
+    for (int i = 0; i < thread_num; i++) {
+        idx[i] = 1;
+        if (pthread_create(pids + i, NULL, write_func, (void*)(idx + i))) {
+            perror("create thread");
+            return 0;
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    while (1) {
+        current_task_num = mix_completed_task_num();
+        if (current_task_num == 2*task_num-1)
+            break;
+        else {
+            if (pre_task_num == current_task_num) {
+                retry_time++;
+                //printf("main retry time is %d and task num is %d\n", retry_time,
+                       //current_task_num);
+                // if(retry_time > 3) break;
+            }
+            pre_task_num = current_task_num;
+            //sleep(1);
+        }
+    }
     printf("current task num is %d\n",current_task_num);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     printf("time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +

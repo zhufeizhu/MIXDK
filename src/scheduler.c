@@ -42,6 +42,7 @@ size_t get_completed_task_num() {
 }
 
 static atomic_int task_num = 0;
+static atomic_int retry_time = 0;
 
 int mix_post_task_to_io(io_task_t* task) {
     int len = 0;
@@ -64,9 +65,9 @@ static inline io_task_t* handle_task(io_task_t* task) {
     if ((size_t)(task->offset + task->len) < sched_ctx->nvm_info->block_num) {
         // printf("nvm task\n");
         // 还未考虑跨区的问题
-        int queue_idx1 = task->offset / sched_ctx->nvm_info->per_block_num;
+        int queue_idx1 = (task->offset / 2 )% 4;
         int queue_idx2 =
-            (task->offset + task->len) / sched_ctx->nvm_info->per_block_num;
+            ((task->offset + task->len) / 2 )%  4;
         if (queue_idx1 == queue_idx1) {
             task->queue_idx = queue_idx1;
             task->type = NVM_TASK;
@@ -155,11 +156,11 @@ static void scheduler(void* arg) {
 
         io_task_t* new_task = handle_task(io_task);
 
+        do_schedule(io_task);
+
         if (new_task) {
             do_schedule(new_task);
         }
-
-        do_schedule(io_task);
     }
 }
 
