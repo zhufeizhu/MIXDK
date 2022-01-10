@@ -7,6 +7,9 @@
 #define MIX_THROUGHOUT 1 << 4
 #define MIX_SYNC 1 << 5
 
+#define NVM_BLOCK_SIZE (1<<12) //4096
+#define SSD_BLOCK_SIZE (1<<12)  //4096
+
 #define size_t unsigned long long
 
 int mixdk_init();

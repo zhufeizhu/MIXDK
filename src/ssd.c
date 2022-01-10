@@ -14,15 +14,15 @@ ssd_info_t* ssd_info;
  **/
 ssd_info_t* mix_ssd_init() {
     ssd_info = malloc(sizeof(ssd_info_t));
-    ssd_info->block_num = 1024 * 1024 * 1024;
+    ssd_info->block_num = 100 * 1024 * 1024;
     ssd_info->block_size = SSD_BLOCK_SIZE;
-    ssd_info->ssd_fd = open("/dev/sdb", O_RDWR|O_DIRECT);
+    ssd_info->ssd_fd = open("/dev/nvme0n1", O_RDWR|O_DIRECT);
     if (ssd_info->ssd_fd < 0) {
         free(ssd_info);
         perror("mix_ssd_init");
         return NULL;
     }
-    ssd_info->ssd_capacity = (size_t)1024 * 1024 * 1024 * 1024;
+    ssd_info->ssd_capacity = (size_t)400 * 1024 * 1024 * 1024;
     return ssd_info;
 }
 

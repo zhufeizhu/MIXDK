@@ -145,15 +145,16 @@ static void scheduler(void* arg) {
     int len = 0;
     int i = 0;
     io_task_t* io_task = malloc(TASK_SIZE);
+    printf("start scheduler\n");
     while (1) {
         // pthread_spin_lock(sched_ctx->schedule_queue_lock);
         len = mix_dequeue(sched_ctx->submit_queue, io_task, 1);
         // pthread_spin_unlock(sched_ctx->schedule_queue_lock);
         if (len == 0) {
-            // printf("empty\n");
+            printf("empty\n");
             continue;
         }
-
+        printf("111\n");
         io_task_t* new_task = handle_task(io_task);
 
         do_schedule(io_task);
@@ -221,17 +222,17 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
     //     return -1;
     // }
     // pthread_spin_init(sched_ctx->schedule_queue_lock, 1);
-
+    printf("111\n");
     ssd_info = mix_ssd_worker_init(size, esize);
     if (ssd_info == NULL) {
         return -1;
     }
-
+    printf("111\n");
     buffer_info = mix_buffer_worker_init(size, esize);
     if (buffer_info == NULL) {
         return -1;
     }
-
+    printf("111\n");
     nvm_info = mix_nvm_worker_init(size, esize);
     if (nvm_info == NULL) {
         return -1;

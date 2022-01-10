@@ -8,10 +8,17 @@
 #include "mixdk.h"
 #include "ssd.h"
 
-static mix_queue_t* ssd_queue;
+#define SSD_QUEUE_NUM 4
+#define SSD_WORKER_NUM 4
+
+static mix_queue_t** ssd_queue;
 static atomic_bool queue_empty;
+//设置队列任务的大小 测试发现当block的大小超过12k时 性能将不再随着block的
+//大小而增加 后面需要再详细测试一下
+static const int stripe_size = 3;
 static atomic_int completed_ssd_task_num = 0;
-static io_task_t ssd_task;
+static io_task_t ssd_task[SSD_QUEUE_NUM];
+static io_task_t post_task;
 
 /**
  * 从ssd中读数据
@@ -44,11 +51,11 @@ static inline void mix_ssd_task_completed(io_task_t* task) {
     atomic_store(task->flag, true);
 }
 
-io_task_t* get_task_from_ssd_queue() {
-    int len = mix_dequeue(ssd_queue, &ssd_task, 1);
+io_task_t* get_task_from_ssd_queue(int idx) {
+    int len = mix_dequeue(ssd_queue[idx], &ssd_task[idx], 1);
     if (len) {
         queue_empty = false;
-        return &ssd_task;
+        return &ssd_task[idx];
     } else {
         queue_empty = true;
         return NULL;
@@ -58,11 +65,12 @@ io_task_t* get_task_from_ssd_queue() {
 atomic_int_fast32_t ssd_task_num = 0;
 
 static void ssd_worker(void* arg) {
+    int idx = *(int*)arg;
     int len = 0;
     int ret = 0;
     io_task_t* task = NULL;
     while (1) {
-       task = get_task_from_ssd_queue();
+       task = get_task_from_ssd_queue(idx);
         if (task == NULL) {
             //printf("empty task\n");
             continue;
@@ -102,13 +110,27 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
         return NULL;
     }
 
-    ssd_queue = mix_queue_init(size, esize);
-
-    if (pthread_create(&pid, NULL, (void*)ssd_worker, NULL)) {
-        printf("create ssd queue failed\n");
-        free(ssd_info);
+    ssd_queue = malloc(sizeof(mix_queue_t*)*SSD_QUEUE_NUM);
+    if(ssd_queue == NULL) {
         return NULL;
     }
+
+    for(int i = 0; i < SSD_QUEUE_NUM; i++){
+        ssd_queue[i] = mix_queue_init(size, esize);
+        if(ssd_queue[i] == NULL) {
+            return NULL; //未做内存释放工作
+        }
+    }
+
+    int idxs[SSD_WORKER_NUM] = {0,1,2,3};
+    for(int i = 0; i < SSD_WORKER_NUM; i++){
+        if (pthread_create(&pid, NULL, (void*)ssd_worker, (void*)&idxs[i])) {
+            printf("create ssd queue failed\n");
+            free(ssd_info);
+            return NULL;
+        }
+    }
+    
     return ssd_info;
 }
 
@@ -118,11 +140,21 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
  **/
 
 int mix_post_task_to_ssd(io_task_t* task) {
+    
     int len = 0;
-    while (len == 0) {
-        len = mix_enqueue(ssd_queue, task, 1);
+    int offset = task->offset % (stripe_size * SSD_QUEUE_NUM) % stripe_size;
+    int task_len = 0;
+    int idx = task->offset % (stripe_size * SSD_QUEUE_NUM) / stripe_size;
+    while(task_len < task->len){
+        post_task.offset = task->offset + task_len;
+        post_task.len = ((task->len - task_len)>=3?3:(task->len - task_len)) - post_task.offset%stripe_size;
+        task_len += post_task.len;
+        post_task.buf = task->buf + post_task.len * SSD_BLOCK_SIZE;
+        post_task.flag = task->flag;
+        while (!mix_enqueue(ssd_queue[idx], &post_task, 1));
+        idx = (idx + 1)%SSD_QUEUE_NUM; 
     }
-    return len;
+    return 1;
 }
 
 atomic_bool mix_ssd_queue_is_empty() {

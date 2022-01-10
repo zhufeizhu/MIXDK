@@ -312,14 +312,15 @@ nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize) {
 
 buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize) {
     buffer_info_t* buffer_info = NULL;
+    printf("222\n");
     if ((buffer_info = mix_buffer_init()) == NULL) {
         return NULL;
     }
-
+    printf("222\n");
     meta_data = mix_metadata_init(buffer_info->block_num);
     if (meta_data == NULL) {
     }
-
+    printf("222\n");
     buffer_queue = mix_queue_init(size, esize);
     if (buffer_queue == NULL) {
         mix_metadata_free(meta_data);
@@ -343,9 +344,10 @@ static atomic_int retry_time = 0;
  **/
 int mix_post_task_to_nvm(io_task_t* task) {
     int l = 0;
-    while (l == 0) {    
-       l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
-       //l = mix_enqueue(nvm_queue[0], task, 1);
+    printf("post task to nvm %lld\n",task->offset);
+    while (l == 0) {        
+        l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
+        //l = mix_enqueue(nvm_queue[0], task, 1);
             //if(l == 0){
                 //printf("retry time is %d\n",retry_time++);
     }

@@ -23,8 +23,6 @@ void* write_func(void* arg) {
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (size_t i = idx; i < task_num; i += thread_num) {
-        // if(i > 500000)
-        // printf("[%d]:task offset is %llu\n",idx,offset + BUF_SIZE * i);
         mixdk_write(buf1, 1, i, flags, i);
         //printf("finish %lld\n",i);
     }
@@ -39,6 +37,7 @@ int main(int argc, char** argv) {
     thread_num = atoi(argv[1]);
     task_num = atoi(argv[2]);
     char c = argv[3][0];
+    printf("mix init begin\n");
     mixdk_init();
 
     printf("mix init succeed\n");

@@ -4,8 +4,6 @@
 
 #include "mixdk.h"
 
-#define SSD_BLOCK_SIZE 4096
-
 typedef struct ssd_info {
     size_t block_num;
     int block_size;
