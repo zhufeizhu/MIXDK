@@ -179,12 +179,10 @@ mix_counting_bloom_filter_t* mix_counting_bloom_filter_init(
                 "malloc for bloom filter failed");
         return NULL;
     }
-    printf("444\n");
     bloom_filter->capacity = capacity;
     bloom_filter->error_rate = error_rate;
     bloom_filter->offset = sizeof(mix_couting_bloom_header_t);
     bloom_filter->nfuncs = (int)ceil(log(1 / error_rate) / log(2));
-    printf("444\n");
     bloom_filter->counts_per_func =
         (int)ceil(capacity * fabs(log(error_rate)) /
                   (bloom_filter->nfuncs * pow(log(2), 2)));
@@ -193,9 +191,7 @@ mix_counting_bloom_filter_t* mix_counting_bloom_filter_init(
     bloom_filter->num_bytes =
         ((bloom_filter->size + 1) / 2) + sizeof(mix_couting_bloom_header_t);
     bloom_filter->hashes = calloc(bloom_filter->nfuncs, sizeof(uint32_t));
-    printf("444\n");
     bloom_filter->bitmap = mix_bitmap_init(bloom_filter->num_bytes);
-    printf("444\n");
     bloom_filter->header =
         (mix_couting_bloom_header_t*)(bloom_filter->bitmap->array);
     return bloom_filter;

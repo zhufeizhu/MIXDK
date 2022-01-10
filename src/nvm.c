@@ -153,7 +153,7 @@ size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
     //memcpy(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
     // printf("nvm task local time is %lld\n",local_time++);
-    printf("[%lld]:[len] %lld [offset] %lld\n",local_time++,len,offset);
+    //printf("[%lld]:[len] %lld [offset] %lld\n",local_time++,len,offset);
 
     return len;
 }

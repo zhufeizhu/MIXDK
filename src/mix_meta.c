@@ -46,12 +46,9 @@ mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        printf("333\n");
         meta_data->hash[i] = mix_hash_init(100);
-        printf("333\n");
         meta_data->bloom_filter[i] =
             mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
-        printf("333\n");
         if (!mix_free_segment_init(&(meta_data->segments[i]),
                                    per_segment_size)) {
             mix_log("mix_init_metadata", "init free segment faield");
@@ -219,7 +216,7 @@ inline bool mix_in_migration(mix_metadata_t* meta_data, int idx) {
 void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
     char buf[4096];
     mix_buffer_read(buf,src,0);
-    mix_ssd_write(buf,dst,1,0);
+    mix_ssd_write(buf,1,dst,0);
 }
 
 /**
@@ -228,6 +225,8 @@ void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
  * @param idx
  */
 void mix_migrate(mix_metadata_t* meta_data, int idx) {
+    meta_data->hash[idx]->hash_list_node_entry = NULL;
+    meta_data->hash[idx]->hash_node_entry_idx = 0;
     for (int i = 0; i < meta_data->per_block_num; i++) {
         mix_kv_t kv = mix_hash_get_entry(meta_data->hash[idx]);
         if (kv.key == (uint32_t)-1 && kv.value == (uint32_t)-1)

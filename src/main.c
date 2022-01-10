@@ -23,7 +23,7 @@ void* write_func(void* arg) {
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (size_t i = idx; i < task_num; i += thread_num) {
-        mixdk_write(buf1, 1, i, flags, i);
+        mixdk_write(buf1, 1, nvm_block_num + i, flags, i);
         //printf("finish %lld\n",i);
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);

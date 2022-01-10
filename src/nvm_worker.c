@@ -13,7 +13,7 @@
 #define NVM_QUEUE_NUM 4
 #define BLOCK_SZIE 4096
 
-static const int threshold = 1;
+static const int threshold = 0;
 static mix_queue_t** nvm_queue = NULL;
 static mix_queue_t* buffer_queue = NULL;
 static mix_metadata_t* meta_data = NULL;
@@ -153,6 +153,7 @@ static int redirect_write(io_task_t* task, int idx) {
     idx = 0;
     //将所有要写的ssd的数据都删除 然后将任务转发到ssd中
     if (task->len <= threshold) {
+        printf("post task to buffer\n");
         int offset = mix_buffer_block_test(meta_data, task->offset);
         if (offset == -1) {
             //如果不在buffer中
@@ -173,7 +174,7 @@ static int redirect_write(io_task_t* task, int idx) {
     } else {
         //将当前task中包含的元数据都清空
         //然后将数据异步的转发到ssd的queue中
-        //printf("post task to ssd\n");
+        printf("post task to ssd\n");
         mix_post_task_to_ssd(task);
         mix_clear_blocks(meta_data, task);
         return 0;
@@ -204,6 +205,7 @@ char* buf = NULL;
 
 static void nvm_worker(void* arg) {
     int idx = *(int*)arg;  //当前线程对应的队列序号
+    printf("nvm worker %d init\n",idx);
     int len = 0;
     int ret = 0;
     uint8_t seq = 0;
@@ -267,7 +269,7 @@ static void nvm_worker(void* arg) {
         //printf("1.ret is %d and task ret is %ld\n",ret,task->ret);
         task->ret = task->ret + ret;
         //printf("task ret is %ld\n",task->ret);
-        //printf("2.ret is %d and task ret is %ld\n",ret,task->ret);
+        printf("2.ret is %d and task ret is %ld\n",ret,task->ret);
         mix_nvm_task_completed(task); 
     }
     return;
@@ -312,15 +314,12 @@ nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize) {
 
 buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize) {
     buffer_info_t* buffer_info = NULL;
-    printf("222\n");
     if ((buffer_info = mix_buffer_init()) == NULL) {
         return NULL;
     }
-    printf("222\n");
     meta_data = mix_metadata_init(buffer_info->block_num);
     if (meta_data == NULL) {
     }
-    printf("222\n");
     buffer_queue = mix_queue_init(size, esize);
     if (buffer_queue == NULL) {
         mix_metadata_free(meta_data);
@@ -344,7 +343,7 @@ static atomic_int retry_time = 0;
  **/
 int mix_post_task_to_nvm(io_task_t* task) {
     int l = 0;
-    printf("post task to nvm %lld\n",task->offset);
+    //printf("post task to nvm %lld\n",task->offset);
     while (l == 0) {        
         l = mix_enqueue(nvm_queue[task->queue_idx], task, 1);
         //l = mix_enqueue(nvm_queue[0], task, 1);

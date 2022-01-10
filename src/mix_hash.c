@@ -282,9 +282,10 @@ mix_kv_t mix_hash_get_entry(mix_hash_t* hash) {
             hash_node->len--;
             break;
         } else {
-            if (hash->hash_node_entry_idx++ == hash->hash_size) {
+            if(hash->hash_node_entry_idx == hash->hash_size){
                 break;
             }
+            hash->hash_node_entry_idx = (hash->hash_node_entry_idx + 1)%hash->hash_size;
         }
     }
     return kv;

@@ -66,11 +66,12 @@ atomic_int_fast32_t ssd_task_num = 0;
 
 static void ssd_worker(void* arg) {
     int idx = *(int*)arg;
+    printf("ssd worker %d init\n",idx);
     int len = 0;
     int ret = 0;
     io_task_t* task = NULL;
     while (1) {
-       task = get_task_from_ssd_queue(idx);
+        task = get_task_from_ssd_queue(idx);
         if (task == NULL) {
             //printf("empty task\n");
             continue;
@@ -122,9 +123,10 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
         }
     }
 
-    int idxs[SSD_WORKER_NUM] = {0,1,2,3};
+    int *idxs = malloc(4);
     for(int i = 0; i < SSD_WORKER_NUM; i++){
-        if (pthread_create(&pid, NULL, (void*)ssd_worker, (void*)&idxs[i])) {
+        idxs[i] = i;
+        if (pthread_create(&pid, NULL, (void*)ssd_worker, (void*)(idxs + i))) {
             printf("create ssd queue failed\n");
             free(ssd_info);
             return NULL;
@@ -140,14 +142,19 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
  **/
 
 int mix_post_task_to_ssd(io_task_t* task) {
-    
     int len = 0;
     int offset = task->offset % (stripe_size * SSD_QUEUE_NUM) % stripe_size;
     int task_len = 0;
     int idx = task->offset % (stripe_size * SSD_QUEUE_NUM) / stripe_size;
     while(task_len < task->len){
         post_task.offset = task->offset + task_len;
-        post_task.len = ((task->len - task_len)>=3?3:(task->len - task_len)) - post_task.offset%stripe_size;
+        if(task_len == 0){
+            post_task.len = 
+        }else{
+            post_task.len = ((task->len - task_len)>=3?3:(task->len - task_len));
+        }
+
+        
         task_len += post_task.len;
         post_task.buf = task->buf + post_task.len * SSD_BLOCK_SIZE;
         post_task.flag = task->flag;
