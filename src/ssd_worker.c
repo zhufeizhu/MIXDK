@@ -15,7 +15,7 @@ static mix_queue_t** ssd_queue;
 static atomic_bool queue_empty;
 //设置队列任务的大小 测试发现当block的大小超过12k时 性能将不再随着block的
 //大小而增加 后面需要再详细测试一下
-static const int stripe_size = 3;
+static const int stripe_size = 4;
 static atomic_int completed_ssd_task_num = 0;
 static io_task_t ssd_task[SSD_QUEUE_NUM];
 static io_task_t post_task;
@@ -152,7 +152,9 @@ int mix_post_task_to_ssd(io_task_t* task) {
         post_task.len = (len > (end - post_task.offset))?(end-offset):len;
         offset += post_task.len;
         post_task.flag = task->flag;
-        post_task.buf = task->buf + post_task.offset * SSD_BLOCK_SIZE;
+        post_task.buf = task->buf + (post_task.offset - task->offset) * SSD_BLOCK_SIZE;
+        post_task.opcode = task->opcode;
+        //printf("post task offset is %lld, len is %lld\n",post_task.offset,post_task.len);
         while (!mix_enqueue(ssd_queue[idx], &post_task, 1));
         idx = (idx + 1)%SSD_QUEUE_NUM; 
     }

@@ -11,18 +11,19 @@
 #include "ssd_worker.h"
 
 #define NVM_QUEUE_NUM 4
+#define BUFFER_QUEUE_NUM 4
 #define BLOCK_SZIE 4096
 
-static const int threshold = 0;
+static const int threshold = 1;
 static mix_queue_t** nvm_queue = NULL;
-static mix_queue_t* buffer_queue = NULL;
+static mix_queue_t** buffer_queue = NULL;
 static mix_metadata_t* meta_data = NULL;
 
 static io_task_t migrate_task;
 static io_task_t nvm_task[NVM_QUEUE_NUM];
 static io_task_t buffer_task[NVM_QUEUE_NUM];
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex[BUFFER_QUEUE_NUM];
 
 _Atomic int completed_nvm_task_num = 0;
 
@@ -92,12 +93,12 @@ io_task_t* get_task_from_nvm_queue(int idx) {
 }
 
 io_task_t* get_task_from_buffer_queue(int idx) {
-    if(pthread_mutex_trylock(&mutex)){
+    if(pthread_mutex_trylock(&mutex[idx])){
         return NULL;
     }
-    int len = mix_dequeue(buffer_queue, &buffer_task[idx], 1);
+    int len = mix_dequeue(buffer_queue[idx], &buffer_task[idx], 1);
     if (len == 0) {
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&mutex[idx]);
         return NULL;
     } else {
         return &buffer_task[idx];
@@ -116,7 +117,7 @@ static size_t redirect_read(io_task_t* task, int idx) {
     read_task.flag = task->flag;
     int offset = 0;
     for (int i = 0; i < task->len; i++) {
-        if ((offset = mix_buffer_block_test(meta_data, task->offset + i))) {
+        if ((offset = mix_buffer_block_test(meta_data, task->offset + i,idx))) {
             if (read_task.offset == -1) {
                 read_task.offset = task->offset + i;
                 read_task.len = 1;
@@ -147,12 +148,17 @@ static size_t redirect_read(io_task_t* task, int idx) {
  * @param idx you
  * @return int
  */
+
+size_t meta_time = 0;
+size_t data_time = 0;
 static int redirect_write(io_task_t* task, int idx) {
-    idx = 0;
+    //idx = 0;
     //将所有要写的ssd的数据都删除 然后将任务转发到ssd中
     if (task->len <= threshold) {
-        printf("post task to buffer\n");
-        int offset = mix_buffer_block_test(meta_data, task->offset);
+        //printf("post task to buffer\n");
+        //struct timespec start, end;
+        //clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+        int offset = mix_buffer_block_test(meta_data, task->offset,idx);
         if (offset == -1) {
             //如果不在buffer中
             offset = mix_get_next_free_block(meta_data, idx);
@@ -166,9 +172,18 @@ static int redirect_write(io_task_t* task, int idx) {
                 offset = mix_get_next_free_block(meta_data, idx);
             }
             mix_write_redirect_block(meta_data,idx,task->offset,offset);
-            mix_write_to_buffer(task->buf, task->offset, offset, task->opcode);
-            return task->len;
         }
+        //clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        //meta_time += (end.tv_sec - start.tv_sec) * 1000000 +
+                                   //(end.tv_nsec - start.tv_nsec) / 1000;
+        //printf("meta time is %llu us\n", meta_time);
+        //clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+        mix_write_to_buffer(task->buf, task->offset, offset, task->opcode);
+        //clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        //data_time = (end.tv_sec - start.tv_sec) * 1000000 +
+                                   //(end.tv_nsec - start.tv_nsec) / 1000;
+        //printf("data time is %llu us\n", meta_time);
+        return task->len;
     } else {
         //将当前task中包含的元数据都清空
         //然后将数据异步的转发到ssd的queue中
@@ -186,7 +201,6 @@ static int redirect_write(io_task_t* task, int idx) {
  * @param idx 需要执行迁移的segment的下标
  */
 void mix_migrate_segment(int idx) {
-    idx = 0;
     int segment_idx = idx;
     mix_segment_migration_begin(meta_data, segment_idx);
     //等待ssd_queue中的所有任务执行完毕
@@ -245,19 +259,19 @@ static void nvm_worker(void* arg) {
             switch (op_code) {
                 case MIX_READ: {
                     ret = redirect_read(task, idx);
-                    pthread_mutex_unlock(&mutex);
+                    pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
                 case MIX_WRITE: {
                     //printf("redirect_write\n");
                     ret = redirect_write(task, idx);
                     //printf("redirect ret is %d\n",ret);
-                    pthread_mutex_unlock(&mutex);
+                    pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
                 default: {
                     ret = 0;
-                    pthread_mutex_unlock(&mutex);
+                    pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
             }
@@ -318,11 +332,18 @@ buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize) {
     meta_data = mix_metadata_init(buffer_info->block_num);
     if (meta_data == NULL) {
     }
-    buffer_queue = mix_queue_init(size, esize);
-    if (buffer_queue == NULL) {
-        mix_metadata_free(meta_data);
-        return NULL;
+
+    buffer_queue = malloc(sizeof(mix_queue_t*)*BUFFER_QUEUE_NUM);
+    for(int i = 0; i < BUFFER_QUEUE_NUM; i++){
+        pthread_mutex_init(&mutex[i],NULL);
+        buffer_queue[i] = mix_queue_init(size, esize);
+        if (buffer_queue == NULL) {
+            mix_metadata_free(meta_data);
+            return NULL;
+        }
     }
+    
+   
 
     return buffer_info;
 }
@@ -353,7 +374,8 @@ int mix_post_task_to_nvm(io_task_t* task) {
 
 int mix_post_task_to_buffer(io_task_t* task) {
     int len = 0;
+    int idx = task->offset % SEGMENT_NUM;
     while (!len) {
-        len = mix_enqueue(buffer_queue, task, 1);
+        len = mix_enqueue(buffer_queue[idx], task, 1);
     }
 }

@@ -13,17 +13,23 @@ size_t nvm_block_num = (size_t)(16) * 1024 * 1024;
 
 size_t offset = 0;  //
 
-#define BUF_SIZE 4096
+
+#define BLOCK_NUM 1
+
+#define BLOCK_SIZE 4096
+
+#define BUF_SIZE BLOCK_SIZE * BLOCK_NUM
+
 
 char buf1[BUF_SIZE];
 
 void* write_func(void* arg) {
     int idx = *(int*)arg;
-    size_t flags = MIX_SYNC;
+    size_t flags = 0;
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (size_t i = idx; i < task_num; i += thread_num) {
-        mixdk_write(buf1, 1, nvm_block_num + i, flags, i);
+        mixdk_write(buf1, BLOCK_NUM, nvm_block_num + i*BLOCK_NUM, flags, i);
         //printf("finish %lld\n",i);
     }
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);

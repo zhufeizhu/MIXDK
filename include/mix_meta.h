@@ -10,7 +10,7 @@
 #include "mix_hash.h"
 #include "mix_task.h"
 
-#define SEGMENT_NUM 1
+#define SEGMENT_NUM 4
 
 typedef struct free_segment {
     size_t size;                         //当前segment的总体的大小
@@ -42,7 +42,7 @@ int mix_get_next_free_block(mix_metadata_t* meta_data, int idx);
 
 void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task);
 
-int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset);
+int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset, int idx);
 
 bool mix_write_redirect_block(mix_metadata_t* meta_data,
                               int idx,

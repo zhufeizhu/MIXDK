@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/time.h>
+#include <time.h>
 
 #include "mix_log.h"
 
@@ -73,7 +75,7 @@ buffer_info_t* mix_buffer_init() {
         return NULL;
     }
 
-    buffer_info->block_num = 4 * 1024;  //总共分成4块 一块有空间 一共占用16m
+    buffer_info->block_num = 4 * 512;  //总共分成4块 一块有空间 一共占用8m
     buffer_info->buffer_capacity =
         (size_t)buffer_info->block_num * (4096 + sizeof(buffer_meta_t));
     buffer_info->meta_addr = NULL;
@@ -172,16 +174,18 @@ size_t mix_buffer_write(void* src,
                         size_t src_block,
                         size_t dst_block,
                         size_t flags) {
-    buffer_meta_t meta;
-    meta.flags = flags;
-    meta.status = 1;
-    meta.timestamp = 0;  //暂时不用
-    meta.offset = src_block;
-
+    
+    // struct timespec start, end;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     mix_ntstorenx32(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, src,
                     BLOCK_SIZE);
-    mix_ntstorenx32(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
-                    META_SIZE);
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    // printf("data time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
+    //                                (end.tv_nsec - start.tv_nsec) / 1000);
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    // printf("meta time is %lu ns\n",
+    //                                (end.tv_nsec - start.tv_nsec));
     return BLOCK_SIZE;
 }
 
@@ -189,4 +193,16 @@ void mix_buffer_clear(size_t dst_block) {
     size_t status = 0;
     mix_ntstorenx32(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, &status,
                     sizeof(size_t));
+}
+
+void mix_buffer_record(size_t src_block,
+                        size_t dst_block,
+                        size_t flags){
+    buffer_meta_t meta;
+    meta.flags = flags;
+    meta.status = 1;
+    meta.timestamp = 0;  //暂时不用
+    meta.offset = src_block;
+    mix_ntstorenx32(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
+                     META_SIZE);
 }

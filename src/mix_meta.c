@@ -46,7 +46,7 @@ mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        meta_data->hash[i] = mix_hash_init(100);
+        meta_data->hash[i] = mix_hash_init(256);
         meta_data->bloom_filter[i] =
             mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
         if (!mix_free_segment_init(&(meta_data->segments[i]),
@@ -79,7 +79,7 @@ void mix_metadata_free(mix_metadata_t* meta_data) {
     for (int i = 0; i < SEGMENT_NUM; i++) {
         mix_free_free_segment(&(meta_data->segments[i]));
         mix_hash_free(meta_data->hash[i]);
-        mix_counting_bloom_filter_free(meta_data->bloom_filter[i]);
+        //mix_counting_bloom_filter_free(meta_data->bloom_filter[i]);
     }
 
     free(meta_data);
@@ -126,7 +126,7 @@ bool mix_write_redirect_block(mix_metadata_t* meta_data,
     mix_hash_put(meta_data->hash[idx], offset, value);
 
     //将key保存到bloom filter中
-    mix_counting_bloom_filter_add(meta_data->bloom_filter[idx], offset);
+    // mix_counting_bloom_filter_add(meta_data->bloom_filter[idx], offset);
 
     meta_data->segments[idx].used_block_num++;
     if (meta_data->segments[idx].used_block_num ==
@@ -146,31 +146,30 @@ bool mix_write_redirect_block(mix_metadata_t* meta_data,
  **/
 void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
     for (int i = 0; i < task->len; i++) {
-        for (int j = 0; j < SEGMENT_NUM; j++) {
+            int idx = task->offset % SEGMENT_NUM;
             // 查询是否在bloom_filter中
-            if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
-                                                task->offset + i)) {
-                continue;
-            }
+            // if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
+            //                                     task->offset + i)) {
+            //     continue;
+            // }
 
             // 查询是否在hash中
-            int value = mix_hash_get(meta_data->hash[j], task->offset + i);
+            int value = mix_hash_get(meta_data->hash[idx], task->offset + i);
             if (value == -1) {
                 continue;
             }
 
             //将key从bloom filter中移除
-            mix_counting_bloom_filter_remove(meta_data->bloom_filter[j],
-                                             task->offset + i);
+            // mix_counting_bloom_filter_remove(meta_data->bloom_filter[j],
+            //                                  task->offset + i);
 
-            mix_hash_delete(meta_data->hash[j], task->offset + i);
+            mix_hash_delete(meta_data->hash[idx], task->offset + i);
 
             //将对应的bitmap设置为clean
             int bit = value % meta_data->per_block_num;
-            mix_bitmap_clear_bit(meta_data->segments[j].bitmap, bit);
-            meta_data->segments[j].used_block_num--;
-            break;
-        }
+            mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, bit);
+            mix_buffer_clear(idx*meta_data->per_block_num + bit);
+            meta_data->segments[idx].used_block_num--;
     }
 }
 
@@ -179,27 +178,26 @@ void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
  *
  * @return 如果在则返回对应的偏移 如果不在则返回-1
  **/
-int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset) {
+int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset, int idx) {
     int value = -1;
-    for (int i = 0; i < SEGMENT_NUM; i++) {
-        if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[i],
-                                            offset)) {
-            continue;
-        }
+    //for (int i = 0; i < SEGMENT_NUM; i++) {
+        // if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[i],
+        //                                     offset)) {
+        //     continue;
+        // }
 
-        int value = mix_hash_get(meta_data->hash[i], offset);
+        value = mix_hash_get(meta_data->hash[idx], offset);
         if (value == -1) {
-            continue;
+            return value;
         }
 
         int bit = value % meta_data->per_block_num;
-        if (!mix_bitmap_test_bit(meta_data->segments[i].bitmap, bit)) {
+        if (!mix_bitmap_test_bit(meta_data->segments[idx].bitmap, bit)) {
             value = -1;
-            continue;
+            return value;
         }
-        break;
-    }
-    return value;
+
+        return value;
 }
 
 /**
@@ -216,6 +214,7 @@ inline bool mix_in_migration(mix_metadata_t* meta_data, int idx) {
 void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
     char buf[4096];
     mix_buffer_read(buf,src,0);
+    mix_buffer_clear(src);
     mix_ssd_write(buf,1,dst,0);
 }
 
@@ -232,7 +231,7 @@ void mix_migrate(mix_metadata_t* meta_data, int idx) {
         if (kv.key == (uint32_t)-1 && kv.value == (uint32_t)-1)
             continue;
         migrate_from_buffer_to_ssd(kv.value, kv.key);
-        mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
+        //mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
         mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, kv.value);
         meta_data->segments[idx].used_block_num--;
     }

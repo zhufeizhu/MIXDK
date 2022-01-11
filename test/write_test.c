@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <string.h>
@@ -8,9 +9,9 @@ int main(int argc, char** argv){
     int block_size = 4096;//4K
     int len = 4096;//1G
 
-    int raw_nvm_fd = open("/dev/pmem1",O_RDWR);
+    int fd = open("/dev/nvme0n1",O_RDWR);
 
-    if(raw_nvm_fd < 0){
+    if(fd < 0){
         perror("open");
         return -1;
     }
@@ -50,8 +51,7 @@ int main(int argc, char** argv){
     printf("off is %ld\n",offs);
     printf("buf is %s\n",buf);
 
-    len = pwrite(raw_nvm_fd,buf,4096,offs);
-    sync();
+    len = pread(fd,buf,4096,offs);
     printf("\n");
 
     return 0;
