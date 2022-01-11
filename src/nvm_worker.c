@@ -69,8 +69,6 @@ static inline void mix_nvm_task_completed(io_task_t* task) {
     if(task->len == task->ret){
         completed_nvm_task_num++;
         return;
-    }else{
-        printf("not equal\n");
     }
     
     // if(completed_nvm_task_num > 500000) printf("completed nvm task num is
@@ -174,7 +172,7 @@ static int redirect_write(io_task_t* task, int idx) {
     } else {
         //将当前task中包含的元数据都清空
         //然后将数据异步的转发到ssd的queue中
-        printf("post task to ssd\n");
+        //printf("post task to ssd\n");
         mix_post_task_to_ssd(task);
         mix_clear_blocks(meta_data, task);
         return 0;
@@ -269,7 +267,7 @@ static void nvm_worker(void* arg) {
         //printf("1.ret is %d and task ret is %ld\n",ret,task->ret);
         task->ret = task->ret + ret;
         //printf("task ret is %ld\n",task->ret);
-        printf("2.ret is %d and task ret is %ld\n",ret,task->ret);
+        //printf("2.ret is %d and task ret is %ld\n",ret,task->ret);
         mix_nvm_task_completed(task); 
     }
     return;

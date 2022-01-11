@@ -142,22 +142,17 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
  **/
 
 int mix_post_task_to_ssd(io_task_t* task) {
+    int offset = task->offset;
+    int end = task->offset + task->len;
+    int idx = (post_task.offset / stripe_size)%SSD_QUEUE_NUM;
     int len = 0;
-    int offset = task->offset % (stripe_size * SSD_QUEUE_NUM) % stripe_size;
-    int task_len = 0;
-    int idx = task->offset % (stripe_size * SSD_QUEUE_NUM) / stripe_size;
-    while(task_len < task->len){
-        post_task.offset = task->offset + task_len;
-        if(task_len == 0){
-            post_task.len = 
-        }else{
-            post_task.len = ((task->len - task_len)>=3?3:(task->len - task_len));
-        }
-
-        
-        task_len += post_task.len;
-        post_task.buf = task->buf + post_task.len * SSD_BLOCK_SIZE;
+    while(offset < end){
+        post_task.offset = offset;
+        len = stripe_size - (post_task.offset % stripe_size);
+        post_task.len = (len > (end - post_task.offset))?(end-offset):len;
+        offset += post_task.len;
         post_task.flag = task->flag;
+        post_task.buf = task->buf + post_task.offset * SSD_BLOCK_SIZE;
         while (!mix_enqueue(ssd_queue[idx], &post_task, 1));
         idx = (idx + 1)%SSD_QUEUE_NUM; 
     }
