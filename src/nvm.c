@@ -75,7 +75,7 @@ buffer_info_t* mix_buffer_init() {
         return NULL;
     }
 
-    buffer_info->block_num = 4 * 512;  //总共分成4块 一块有空间 一共占用8m
+    buffer_info->block_num = 4 * 2;  //总共分成4块 一块有空间 一共占用8m
     buffer_info->buffer_capacity =
         (size_t)buffer_info->block_num * (4096 + sizeof(buffer_meta_t));
     buffer_info->meta_addr = NULL;
@@ -141,7 +141,7 @@ size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
     //     l = len;
     // }
     //_mm_lfence();
-    mix_ntstorenx32(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
+    mix_ntstorenx64(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
                     len * BLOCK_SIZE);
     // printf("[len] %d [offset] %d\n",l,offset);
 
@@ -152,7 +152,7 @@ static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     //printf("write %lld task\n",local_time++);
-    mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
+    mix_ntstorenx32(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
     //memcpy(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
     // printf("nvm task local time is %lld\n",local_time++);
     //printf("[%lld]:[len] %lld [offset] %lld\n",local_time++,len,offset);
@@ -179,6 +179,7 @@ size_t mix_buffer_write(void* src,
     // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     mix_ntstorenx32(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, src,
                     BLOCK_SIZE);
+    //printf("[%lld]:[len] %d [offset] %lld\n",local_time++,1,src_block);
     // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     // printf("data time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
     //                                (end.tv_nsec - start.tv_nsec) / 1000);

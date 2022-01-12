@@ -21,14 +21,14 @@ size_t offset = 0;  //
 #define BUF_SIZE BLOCK_SIZE * BLOCK_NUM
 
 
-char buf1[BUF_SIZE];
+char* buf1;
 
 void* write_func(void* arg) {
     int idx = *(int*)arg;
     size_t flags = 0;
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    for (size_t i = idx; i < task_num; i += thread_num) {
+    for (size_t i = 0; i < task_num; i += thread_num) {
         mixdk_write(buf1, BLOCK_NUM, nvm_block_num + i*BLOCK_NUM, flags, i);
         //printf("finish %lld\n",i);
     }
@@ -51,6 +51,7 @@ int main(int argc, char** argv) {
     printf("thread num is %d\n",thread_num);
     printf("content is %c\n\n\n", c);
 
+    buf1 = valloc(BUF_SIZE);
     memset(buf1, c, BUF_SIZE);
     // int n = 0;
     pthread_t* pids = malloc(sizeof(pthread_t*) * thread_num);
@@ -88,7 +89,7 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     printf("time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
                                    (end.tv_nsec - start.tv_nsec) / 1000);
-    // pthread_join(pids[0],NULL);
+    pthread_join(pids[0],NULL);
     memset(buf1, c+1, BUF_SIZE);
     for (int i = 0; i < thread_num; i++) {
         idx[i] = 1;
@@ -100,7 +101,7 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     while (1) {
         current_task_num = mix_completed_task_num();
-        if (current_task_num == 2*task_num-1)
+        if (current_task_num == 2*task_num)
             break;
         else {
             if (pre_task_num == current_task_num) {
@@ -117,5 +118,6 @@ int main(int argc, char** argv) {
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     printf("time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
                                    (end.tv_nsec - start.tv_nsec) / 1000);
+    return 0;
 }
 

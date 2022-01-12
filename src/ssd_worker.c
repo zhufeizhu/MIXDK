@@ -18,6 +18,7 @@ static atomic_bool queue_empty;
 static const int stripe_size = 4;
 static atomic_int completed_ssd_task_num = 0;
 static io_task_t ssd_task[SSD_QUEUE_NUM];
+static pthread_mutex_t ssd_mutex[SSD_QUEUE_NUM];
 static io_task_t post_task;
 
 /**
@@ -118,6 +119,7 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
 
     for(int i = 0; i < SSD_QUEUE_NUM; i++){
         ssd_queue[i] = mix_queue_init(size, esize);
+        pthread_mutex_init(&ssd_mutex[i],NULL);
         if(ssd_queue[i] == NULL) {
             return NULL; //未做内存释放工作
         }
@@ -155,7 +157,9 @@ int mix_post_task_to_ssd(io_task_t* task) {
         post_task.buf = task->buf + (post_task.offset - task->offset) * SSD_BLOCK_SIZE;
         post_task.opcode = task->opcode;
         //printf("post task offset is %lld, len is %lld\n",post_task.offset,post_task.len);
+        pthread_mutex_lock(&ssd_mutex[idx]);
         while (!mix_enqueue(ssd_queue[idx], &post_task, 1));
+        pthread_mutex_unlock(&ssd_mutex[idx]);
         idx = (idx + 1)%SSD_QUEUE_NUM; 
     }
     return 1;

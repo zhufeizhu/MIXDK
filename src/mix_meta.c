@@ -46,7 +46,7 @@ mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
 
     for (int i = 0; i < SEGMENT_NUM; i++) {
-        meta_data->hash[i] = mix_hash_init(256);
+        meta_data->hash[i] = mix_hash_init(100);
         meta_data->bloom_filter[i] =
             mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
         if (!mix_free_segment_init(&(meta_data->segments[i]),
@@ -98,8 +98,7 @@ int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
     if(meta_data->segments[idx].used_block_num == meta_data->per_block_num) return -1;
 
     //从free_segment中申请空闲块
-    return idx * meta_data->per_block_num +
-           mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
+    return idx + SEGMENT_NUM * mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
 }
 
 /**
@@ -115,8 +114,8 @@ int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
 bool mix_write_redirect_block(mix_metadata_t* meta_data,
                               int idx,
                               uint32_t offset,
-                              int bit) {
-    uint32_t value = bit + idx * meta_data->per_block_num;
+                              int value) {
+    uint32_t bit = (value - idx)/SEGMENT_NUM;
     //将对应的bitmap设置为dirty
     if (!mix_bitmap_set_bit(meta_data->segments[idx].bitmap,bit)) {
         return false;
@@ -124,7 +123,6 @@ bool mix_write_redirect_block(mix_metadata_t* meta_data,
 
     //将key-value保存到hash中
     mix_hash_put(meta_data->hash[idx], offset, value);
-
     //将key保存到bloom filter中
     // mix_counting_bloom_filter_add(meta_data->bloom_filter[idx], offset);
 

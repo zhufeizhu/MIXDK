@@ -342,9 +342,6 @@ buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize) {
             return NULL;
         }
     }
-    
-   
-
     return buffer_info;
 }
 
