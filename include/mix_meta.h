@@ -9,6 +9,7 @@
 #include "mix_bloom_filter.h"
 #include "mix_hash.h"
 #include "mix_task.h"
+#include "mix_logging.h"
 
 #define SEGMENT_NUM 4
 
@@ -32,6 +33,7 @@ typedef struct mix_metadata {
     mix_counting_bloom_filter_t*
         bloom_filter[SEGMENT_NUM];         //全局的bloom_filter
     free_segment_t segments[SEGMENT_NUM];  //四个free_segment
+    mix_log_t* logs[SEGMENT_NUM];
 } mix_metadata_t;
 
 mix_metadata_t* mix_metadata_init(uint32_t block_num);
@@ -44,7 +46,7 @@ void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task);
 
 int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset, int idx);
 
-bool mix_write_redirect_block(mix_metadata_t* meta_data,
+bool mix_write_redirect_blockmeta(mix_metadata_t* meta_data,
                               int idx,
                               uint32_t offset,
                               int bit);

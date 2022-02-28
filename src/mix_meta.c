@@ -111,7 +111,7 @@ int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
  * @return true表示当前idx已满
  *         false表示当前idx未满
  **/
-bool mix_write_redirect_block(mix_metadata_t* meta_data,
+bool mix_write_redirect_blockmeta(mix_metadata_t* meta_data,
                               int idx,
                               uint32_t offset,
                               int value) {
@@ -144,30 +144,30 @@ bool mix_write_redirect_block(mix_metadata_t* meta_data,
  **/
 void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
     for (int i = 0; i < task->len; i++) {
-            int idx = task->offset % SEGMENT_NUM;
-            // 查询是否在bloom_filter中
-            // if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
-            //                                     task->offset + i)) {
-            //     continue;
-            // }
+        int idx = task->offset % SEGMENT_NUM;
+        // 查询是否在bloom_filter中
+        // if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
+        //                                     task->offset + i)) {
+        //     continue;
+        // }
 
-            // 查询是否在hash中
-            int value = mix_hash_get(meta_data->hash[idx], task->offset + i);
-            if (value == -1) {
-                continue;
-            }
+        // 查询是否在hash中
+        int value = mix_hash_get(meta_data->hash[idx], task->offset + i);
+        if (value == -1) {
+            continue;
+        }
 
-            //将key从bloom filter中移除
-            // mix_counting_bloom_filter_remove(meta_data->bloom_filter[j],
-            //                                  task->offset + i);
+        //将key从bloom filter中移除
+        // mix_counting_bloom_filter_remove(meta_data->bloom_filter[j],
+        //                                  task->offset + i);
 
-            mix_hash_delete(meta_data->hash[idx], task->offset + i);
+        mix_hash_delete(meta_data->hash[idx], task->offset + i);
 
-            //将对应的bitmap设置为clean
-            int bit = value % meta_data->per_block_num;
-            mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, bit);
-            mix_buffer_clear(idx*meta_data->per_block_num + bit);
-            meta_data->segments[idx].used_block_num--;
+        //将对应的bitmap设置为clean
+        int bit = value % meta_data->per_block_num;
+        mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, bit);
+        mix_buffer_clear(idx*meta_data->per_block_num + bit);
+        meta_data->segments[idx].used_block_num--;
     }
 }
 
@@ -230,9 +230,10 @@ void mix_migrate(mix_metadata_t* meta_data, int idx) {
             continue;
         migrate_from_buffer_to_ssd(kv.value, kv.key);
         //mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
-        mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, kv.value);
+        //mix_hash_delete(meta_data->hash[idx],kv.key);
         meta_data->segments[idx].used_block_num--;
     }
+    mix_bitmap_clear(meta_data->segments[idx].bitmap);
 }
 
 inline bool mix_segment_migrating(mix_metadata_t* meta_data, int idx) {

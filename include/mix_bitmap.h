@@ -23,6 +23,8 @@ int mix_bitmap_set_bit(mix_bitmap_t* bitmap, int nr);
 
 int mix_bitmap_clear_bit(mix_bitmap_t* bitmap, int nr);
 
+void mix_bitmap_clear(mix_bitmap_t* bitmap);
+
 int mix_bitmap_test_bit(mix_bitmap_t* bitmap, int nr);
 
 int mix_bitmap_free(mix_bitmap_t* bitmap);

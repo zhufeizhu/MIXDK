@@ -92,6 +92,8 @@ io_task_t* get_task_from_nvm_queue(int idx) {
     }
 }
 
+static atomic_int dequeue_task_num = 0;
+
 io_task_t* get_task_from_buffer_queue(int idx) {
     if(pthread_mutex_trylock(&mutex[idx])){
         return NULL;
@@ -158,21 +160,22 @@ static int redirect_write(io_task_t* task, int idx) {
         //printf("post task to buffer\n");
         //struct timespec start, end;
         //clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        int offset = mix_buffer_block_test(meta_data, task->offset,idx);
-        if (offset == -1) {
-            //如果不在buffer中
-            offset = mix_get_next_free_block(meta_data, idx);
-            if (offset == -1) {
-                //表明当前segment已经满了
-                //需要将当前segment进行迁移
-                printf("migrate begin\n");
-                mix_migrate_segment(idx);
-                printf("migrate end\n");
-                //迁移后重新获取重定向的地址
-                offset = mix_get_next_free_block(meta_data, idx);
-            }
-            mix_write_redirect_block(meta_data,idx,task->offset,offset);
-        }
+        int offset = 0;
+        // int offset = mix_buffer_block_test(meta_data, task->offset,idx);
+        // if (offset == -1) {
+        //     //如果不在buffer中
+        //     offset = mix_get_next_free_block(meta_data, idx);
+        //     if (offset == -1) {
+        //         //表明当前segment已经满了
+        //         //需要将当前segment进行迁移
+        //         printf("migrate begin %d\n",idx);
+        //         mix_migrate_segment(idx);
+        //         printf("migrate end %d\n",idx);
+        //         //迁移后重新获取重定向的地址
+        //         offset = mix_get_next_free_block(meta_data, idx);
+        //     }
+        //     mix_write_redirect_blockmeta(meta_data,idx,task->offset,offset);
+        // }
         //clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         //meta_time += (end.tv_sec - start.tv_sec) * 1000000 +
                                    //(end.tv_nsec - start.tv_nsec) / 1000;
@@ -210,6 +213,7 @@ void mix_migrate_segment(int idx) {
     mix_segment_migration_end(meta_data, segment_idx);
 }
 atomic_int empty_num = 0;
+//atomic_int task_num = 0;
 
 static struct timespec start, end;
 
@@ -226,15 +230,18 @@ static void nvm_worker(void* arg) {
     while (1) {
         if (seq & mask)
             task = get_task_from_nvm_queue(idx);
-        else
+        else{
             task = get_task_from_buffer_queue(idx);
-
+        }
+        
         seq++;
         if (task == NULL){
             // if(idx == 0 && start == 1){
             //     printf("emtpy task num is %d\n",empty_num++);
             // }
             continue; 
+        }else{
+            //printf("task num is %d and idx is %d\n",task_num++,idx);
         }
     
         size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
@@ -263,7 +270,7 @@ static void nvm_worker(void* arg) {
                     break;
                 }
                 case MIX_WRITE: {
-                    //printf("redirect_write\n");
+                    //printf("redirect_write %d\n",empty_num++);
                     ret = redirect_write(task, idx);
                     //printf("redirect ret is %d\n",ret);
                     pthread_mutex_unlock(&mutex[idx]);
@@ -342,6 +349,8 @@ buffer_info_t* mix_buffer_worker_init(unsigned int size, unsigned int esize) {
             return NULL;
         }
     }
+
+
     return buffer_info;
 }
 
@@ -369,9 +378,13 @@ int mix_post_task_to_nvm(io_task_t* task) {
     return l;
 }
 
+
+static atomic_int buffer_task_num = 0;
+
 int mix_post_task_to_buffer(io_task_t* task) {
     int len = 0;
     int idx = task->offset % SEGMENT_NUM;
+    //printf("buffer task num is %d and idx is %d\n",buffer_task_num++,idx);
     while (!len) {
         len = mix_enqueue(buffer_queue[idx], task, 1);
     }

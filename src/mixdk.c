@@ -8,6 +8,7 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "mix_task.h"
 #include "scheduler.h"
@@ -23,7 +24,8 @@ size_t mixdk_write(void* src,
                    size_t flags,
                    int idx) {
     io_task_t* task = malloc(sizeof(io_task_t));
-    task->buf = src;
+    task->buf = malloc(len*BLOCK_SIZE);
+    memcpy(task->buf,src,len*BLOCK_SIZE);
     task->len = len;
     task->offset = offset;
     task->opcode = MIX_WRITE | flags;

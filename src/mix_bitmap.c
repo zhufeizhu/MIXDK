@@ -15,7 +15,7 @@ mix_bitmap_t* mix_bitmap_init(int bytes) {
         return NULL;
     }
 
-    bitmap->bytes = bytes;
+    bitmap->bytes = bytes/BITS_PER_BYTE;
     bitmap->next_bit = 0;
     bitmap->nvm_offset = 0;
     bitmap->array = malloc(bytes * sizeof(char));
@@ -87,6 +87,11 @@ int mix_bitmap_set_bit(mix_bitmap_t* bitmap,int nr) {
     retval = (mask & *addr) != 0;
     *addr |= mask;
     return (int)retval;  //返回置数值
+}
+
+void mix_bitmap_clear(mix_bitmap_t* bitmap){
+    memset(bitmap->array,0,bitmap->bytes);
+    bitmap->next_bit = 0;
 }
 
 int mix_bitmap_clear_bit(mix_bitmap_t* bitmap, int nr) {

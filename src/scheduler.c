@@ -94,7 +94,7 @@ static inline io_task_t* handle_task(io_task_t* task) {
         return NULL;
     }
 
-    //当前task跨过了nvm和ssd两个区域
+    //当前task跨过了nvm和ssd两个区域 基本上不会存在
     if ((size_t)task->offset < sched_ctx->nvm_info->block_num &&
         (size_t)(task->offset + task->len) > sched_ctx->nvm_info->block_num) {
         size_t len1 = sched_ctx->nvm_info->block_num - (size_t)task->offset;
