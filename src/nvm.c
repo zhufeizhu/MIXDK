@@ -177,16 +177,16 @@ size_t mix_buffer_write(void* src,
     
     // struct timespec start, end;
     // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    // buffer_meta_t meta;
-    // meta.flags = flags;
-    // meta.status = 1;
-    // meta.timestamp = 0;  //暂时不用
-    // meta.offset = src_block;
+    buffer_meta_t meta;
+    meta.flags = flags;
+    meta.status = 1;
+    meta.timestamp = 0;  //暂时不用
+    meta.offset = src_block;
 
-    // mix_ntstorenx64(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, src,
-    //                 BLOCK_SIZE);
-    // mix_ntstorenx64(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
-    //                 META_SIZE);
+    mix_ntstorenx64(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, src,
+                    BLOCK_SIZE);
+    mix_ntstorenx64(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
+                    META_SIZE);
     //printf("[%lld]:[len] %d [offset] %lld\n",local_time++,1,src_block);
     // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     // printf("data time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +

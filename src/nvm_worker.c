@@ -160,22 +160,22 @@ static int redirect_write(io_task_t* task, int idx) {
         //printf("post task to buffer\n");
         //struct timespec start, end;
         //clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        int offset = 0;
-        // int offset = mix_buffer_block_test(meta_data, task->offset,idx);
-        // if (offset == -1) {
-        //     //如果不在buffer中
-        //     offset = mix_get_next_free_block(meta_data, idx);
-        //     if (offset == -1) {
-        //         //表明当前segment已经满了
-        //         //需要将当前segment进行迁移
-        //         printf("migrate begin %d\n",idx);
-        //         mix_migrate_segment(idx);
-        //         printf("migrate end %d\n",idx);
-        //         //迁移后重新获取重定向的地址
-        //         offset = mix_get_next_free_block(meta_data, idx);
-        //     }
-        //     mix_write_redirect_blockmeta(meta_data,idx,task->offset,offset);
-        // }
+
+        int offset = mix_buffer_block_test(meta_data, task->offset,idx);
+        if (offset == -1) {
+            //如果不在buffer中
+            offset = mix_get_next_free_block(meta_data, idx);
+            if (offset == -1) {
+                //表明当前segment已经满了
+                //需要将当前segment进行迁移
+                printf("migrate begin %d\n",idx);
+                mix_migrate_segment(idx);
+                printf("migrate end %d\n",idx);
+                //迁移后重新获取重定向的地址
+                offset = mix_get_next_free_block(meta_data, idx);
+            }
+            mix_write_redirect_blockmeta(meta_data,idx,task->offset,offset);
+        }
         //clock_gettime(CLOCK_MONOTONIC_RAW, &end);
         //meta_time += (end.tv_sec - start.tv_sec) * 1000000 +
                                    //(end.tv_nsec - start.tv_nsec) / 1000;
