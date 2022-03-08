@@ -25,7 +25,7 @@ typedef struct buffer_meta {
     size_t timestamp;  //时间戳
     size_t offset;     //目标地址
     size_t flags;      //保留位
-} buffer_meta_t;
+} __attribute__((packed)) buffer_meta_t;
 
 nvm_info_t* mix_nvm_init();
 
@@ -42,5 +42,7 @@ size_t mix_buffer_write(void* src, size_t, size_t, size_t);
 size_t mix_buffer_read(void* dst, size_t dst_block, size_t flags);
 
 void mix_buffer_clear(size_t dst_block);
+
+void mix_buffer_get_meta(buffer_meta_t*, int);
 
 #endif

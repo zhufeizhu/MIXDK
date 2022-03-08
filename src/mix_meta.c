@@ -1,6 +1,7 @@
 #include "mix_meta.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "mix_hash.h"
 #include "mix_log.h"
@@ -88,7 +89,7 @@ void mix_metadata_free(mix_metadata_t* meta_data) {
 /**
  * @brief 为task获取free_segment中下一个空闲块 返回的值代表该块在buffer中的偏移
  *
- * @return 不存在空闲块时返回-1 存在时返回其在buffer中的偏移
+ * @return 不存在空闲块时返回-1 存在时返回其在当前segment中的偏移
  **/
 int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
     if (meta_data->segments[idx].migration) {
@@ -236,6 +237,36 @@ void mix_migrate(mix_metadata_t* meta_data, int idx) {
     }
     mix_bitmap_clear(meta_data->segments[idx].bitmap);
 }
+
+bool mix_buffer_rebuild(mix_metadata_t* meta_data,int idx){
+    if(meta_data == NULL){
+        mix_log("mix_rebuild","meta data is NULL");
+        return false;
+    }
+    printf("rebuild %d segment start\n",idx);
+    buffer_meta_t buffer_meta;
+    int per_block_num = meta_data->per_block_num;
+    memset(&buffer_meta,0,sizeof(buffer_meta_t));
+    for(int off = 0; off < meta_data->per_block_num; off++){
+        mix_buffer_get_meta(&buffer_meta,idx*per_block_num+off);
+        if(buffer_meta.status&1){
+            //表明当前块有效
+            mix_bitmap_set_bit(meta_data->segments[idx].bitmap,off);
+            meta_data->segments[idx].used_block_num++;
+            mix_hash_put(meta_data->hash[idx],buffer_meta.offset,off);
+        }
+    }
+    printf("rebuild %d segment finish\n",idx);
+    return true;
+}
+
+bool mix_segment_clear(mix_metadata_t* meta_data,int idx){
+    int per_block_num = meta_data->per_block_num;
+    for(int i = 0; i < meta_data->per_block_num; i++){
+        mix_buffer_clear(idx*per_block_num + i);
+    }
+}
+
 
 inline bool mix_segment_migrating(mix_metadata_t* meta_data, int idx) {
     return meta_data->segments[idx].migration;

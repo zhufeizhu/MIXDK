@@ -237,6 +237,8 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
 
     mix_nvm_mmap(nvm_info, buffer_info);
 
+    mix_rebuild();
+
     sched_ctx->ssd_info = ssd_info;
     sched_ctx->nvm_info = nvm_info;
     sched_ctx->buffer_info = buffer_info;

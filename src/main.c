@@ -14,11 +14,13 @@ size_t nvm_block_num = (size_t)(16) * 1024 * 1024;
 size_t offset = 0;  //
 
 
-#define BLOCK_NUM 4
+#define BUF_LEN 1
+
+#define TASK
 
 #define BLOCK_SIZE 4096
 
-#define BUF_SIZE BLOCK_SIZE * BLOCK_NUM
+#define BUF_SIZE BLOCK_SIZE * BUF_LEN
 
 
 char* buf1;
@@ -30,11 +32,12 @@ void* write_func(void* arg) {
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     for (size_t i = 0; i < task_num; i += thread_num) {
-        mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM,0,i);
-        mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+1,0,i);    
-        mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+2,0,i);
-        mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+3,0,i);
-        mixdk_write(buf1,BLOCK_NUM, nvm_block_num + i*BLOCK_NUM,0,i);
+        // mixdk_read(buf2,BUF_LEN,i,0,i);
+        mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN,0,i);
+        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);    
+        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
+        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+3,0,i);
+        //mixdk_write(buf1,BUF_LEN, nvm_block_num + i*BUF_LEN+2,0,i);
         //mixdk_read(buf2,BLOCK_NUM, nvm_block_num + i*BLOCK_NUM,0,i);
         //printf("read %lld is %s\n",i,buf2);
     }
@@ -88,7 +91,7 @@ int main(int argc, char** argv) {
     int retry_time = 0;
     while (1) {
         current_task_num = mix_completed_task_num();
-        if (current_task_num == task_num*2*BLOCK_NUM)
+        if (current_task_num == task_num*BUF_LEN)
             break;
         else {
             if (pre_task_num == current_task_num) {

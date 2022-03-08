@@ -19,4 +19,6 @@ int mix_post_task_to_buffer(io_task_t* task);
 
 atomic_int mix_get_completed_nvm_write_block_num();
 
+void mix_rebuild();
+
 #endif  // MIX_NVM_WORKER_H

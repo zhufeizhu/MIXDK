@@ -20,11 +20,14 @@ static mix_queue_t** nvm_queue = NULL;
 static mix_queue_t** buffer_queue = NULL;
 static mix_metadata_t* meta_data = NULL;
 
+static pthread_cond_t rebuild_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t mutex[BUFFER_QUEUE_NUM];
+
 static io_task_t migrate_task;
 static io_task_t nvm_task[NVM_QUEUE_NUM];
 static io_task_t buffer_task[NVM_QUEUE_NUM];
+static atomic_bool rebuild = false;
 
-pthread_mutex_t mutex[BUFFER_QUEUE_NUM];
 
 _Atomic int completed_nvm_write_block_num = 0;
 
@@ -163,7 +166,7 @@ static int redirect_write(io_task_t* task, int idx) {
             }
             mix_write_redirect_blockmeta(meta_data, idx, task->offset, offset);
         }
-        mix_write_to_buffer(task->buf, task->offset, offset, task->opcode);
+        mix_write_to_buffer(task->buf, idx * meta_data->per_block_num*idx + task->offset, offset, task->opcode);
         return task->len;
     } else {
         mix_post_task_to_ssd(task, idx);
@@ -194,9 +197,19 @@ static struct timespec start, end;
 
 char* buf = NULL;
 
+static atomic_int_fast8_t rebuild_num = 0;
+
 static void nvm_worker(void* arg) {
     int idx = *(int*)arg;  //当前线程对应的队列序号
     printf("nvm worker %d init\n", idx);
+
+    pthread_mutex_lock(&mutex[idx]);
+    while(!rebuild) pthread_cond_wait(&rebuild_cond,&mutex[idx]);
+    if(mix_buffer_rebuild(meta_data,idx)){
+        rebuild_num++;
+    }
+    pthread_mutex_unlock(&mutex[idx]);
+
     int len = 0;
     int ret = 0;
     uint8_t seq = 0;
@@ -272,6 +285,7 @@ nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize) {
     nvm_queue = malloc(NVM_QUEUE_NUM * sizeof(mix_queue_t*));
     if (nvm_queue == NULL) {
         perror("alloc memory for mix queue failed\n");
+        return NULL;
     }
 
     for (int i = 0; i < NVM_QUEUE_NUM; i++) {
@@ -292,7 +306,6 @@ nvm_info_t* mix_nvm_worker_init(unsigned int size, unsigned int esize) {
             return NULL;
         }
     }
-
     return nvm_info;
 }
 
@@ -364,4 +377,14 @@ int mix_post_task_to_buffer(io_task_t* task) {
         // pthread_mutex_unlock(&ssd_mutex[idx]);
         idx = (idx + 1) % BUFFER_QUEUE_NUM;
     }
+}
+
+
+void mix_rebuild(){
+    // for(int i = 0; i < SEGMENT_NUM; i++){
+    //     mix_segment_clear(meta_data,i);
+    // }
+    rebuild = true;
+    pthread_cond_broadcast(&rebuild_cond);
+    while(rebuild_num < SEGMENT_NUM);
 }

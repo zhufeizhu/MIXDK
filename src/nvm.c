@@ -178,18 +178,12 @@ size_t mix_buffer_write(void* src,
 
 void mix_buffer_clear(size_t dst_block) {
     size_t status = 0;
-    mix_ntstorenx32(buffer_info->buffer_addr + dst_block * BLOCK_SIZE, &status,
+    mix_ntstorenx32(buffer_info->meta_addr + dst_block * META_SIZE, &status,
                     sizeof(size_t));
 }
 
-void mix_buffer_record(size_t src_block,
-                       size_t dst_block,
-                       size_t flags) {
-    buffer_meta_t meta;
-    meta.flags = flags;
-    meta.status = 1;
-    meta.timestamp = 0;  //暂时不用
-    meta.offset = src_block;
-    mix_ntstorenx32(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
+
+void mix_buffer_get_meta(buffer_meta_t* meta, int dst_block) {
+    mix_ntstorenx32(meta, buffer_info->meta_addr + META_SIZE * dst_block,
                     META_SIZE);
 }
