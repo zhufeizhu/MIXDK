@@ -28,7 +28,7 @@ int mix_init_scheduler(unsigned int, unsigned int, int);
 
 int mix_post_task_to_io(io_task_t*);
 
-int mix_wait_for_task_completed(atomic_bool*);
+int mix_wait_for_task_completed(int, atomic_int_fast32_t*);
 
 size_t get_completed_task_num();
 

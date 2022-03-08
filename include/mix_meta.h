@@ -63,4 +63,8 @@ void mix_segment_migration_begin(mix_metadata_t* meta_data, int idx);
 
 void mix_segment_migration_end(mix_metadata_t* meta_data, int idx);
 
+bool mix_buffer_rebuild(mix_metadata_t*, int );
+
+bool mix_segment_clear(mix_metadata_t* ,int);
+
 #endif

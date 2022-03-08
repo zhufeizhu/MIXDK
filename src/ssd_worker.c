@@ -81,6 +81,7 @@ static void ssd_worker(void* arg) {
             case MIX_READ: {
                 ret = mix_read_from_ssd(task->buf, task->len, task->offset,
                                         task->opcode);
+                *(task->ret) =  *(task->ret) + ret;
                 break;
             };
             case MIX_WRITE: {

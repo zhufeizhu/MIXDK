@@ -52,17 +52,16 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx) {
     task->len = len;
     task->offset = offset;
     task->opcode = MIX_READ | flags;
-    atomic_bool read_finish_flag = false;
-    task->flag = &read_finish_flag;
-    task->ret = 0;
+    task->ret = malloc(sizeof(atomic_int_fast32_t));
+    *(task->ret) = 0;
 
     int ind = mix_post_task_to_io(task);
     if (ind < 0) {
         return 1;
     }
 
-    mix_wait_for_task_completed(&read_finish_flag);
-
+    mix_wait_for_task_completed(len,task->ret);
+    free(task->ret);
     free(task);
     return 0;
 }

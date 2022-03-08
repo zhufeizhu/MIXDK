@@ -114,19 +114,23 @@ static size_t redirect_read(io_task_t* task, int idx) {
     read_task.opcode = MIX_READ;
     read_task.flag = task->flag;
     int offset = 0;
+    if(task->offset == 20){
+        printf("debug\n");
+    }
     for (int i = 0; i < task->len; i++) {
         if ((offset = mix_buffer_block_test(meta_data, task->offset + i, idx)) == -1) {
             if (read_task.offset == -1) {
                 read_task.offset = task->offset + i;
                 read_task.len = 1;
-                read_task.buf = task->buf + BLOCK_SIZE * read_task.offset;
+                read_task.buf = task->buf + BLOCK_SIZE * (read_task.offset - task->offset);
+                read_task.ret = task->ret;
             } else {
                 read_task.len++;
             }
         } else {
             if (read_task.len > 0)
                 mix_post_task_to_ssd(&read_task, idx);
-            ret += mix_read_from_buffer(task->buf + i * BLOCK_SIZE, offset,
+            ret += mix_read_from_buffer(task->buf + i * BLOCK_SIZE, offset + idx * meta_data->per_block_num,
                                         task->opcode);
             read_task.offset = -1;
             read_task.len = 0;
@@ -166,7 +170,7 @@ static int redirect_write(io_task_t* task, int idx) {
             }
             mix_write_redirect_blockmeta(meta_data, idx, task->offset, offset);
         }
-        mix_write_to_buffer(task->buf, idx * meta_data->per_block_num*idx + task->offset, offset, task->opcode);
+        mix_write_to_buffer(task->buf, task->offset, idx * meta_data->per_block_num + offset,task->opcode);
         return task->len;
     } else {
         mix_post_task_to_ssd(task, idx);
@@ -233,6 +237,7 @@ static void nvm_worker(void* arg) {
                 case MIX_READ: {
                     ret = mix_read_from_nvm(task->buf, task->len, task->offset,
                                             task->opcode);
+                    *(task->ret) =  *(task->ret) + ret;
                     break;
                 };
                 case MIX_WRITE: {
@@ -250,6 +255,7 @@ static void nvm_worker(void* arg) {
             switch (op_code) {
                 case MIX_READ: {
                     ret = redirect_read(task, idx);
+                    *(task->ret) =  *(task->ret) + ret;
                     pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
@@ -381,9 +387,9 @@ int mix_post_task_to_buffer(io_task_t* task) {
 
 
 void mix_rebuild(){
-    // for(int i = 0; i < SEGMENT_NUM; i++){
-    //     mix_segment_clear(meta_data,i);
-    // }
+    for(int i = 0; i < SEGMENT_NUM; i++){
+        mix_segment_clear(meta_data,i);
+    }
     rebuild = true;
     pthread_cond_broadcast(&rebuild_cond);
     while(rebuild_num < SEGMENT_NUM);

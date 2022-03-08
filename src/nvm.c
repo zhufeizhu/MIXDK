@@ -145,7 +145,7 @@ static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
-    //printf("[len] %lld [offset] %lld\n", len, offset);
+    // printf("[len] %lld [offset] %lld\n", len, offset);
     return len;
 }
 
@@ -181,7 +181,6 @@ void mix_buffer_clear(size_t dst_block) {
     mix_ntstorenx32(buffer_info->meta_addr + dst_block * META_SIZE, &status,
                     sizeof(size_t));
 }
-
 
 void mix_buffer_get_meta(buffer_meta_t* meta, int dst_block) {
     mix_ntstorenx32(meta, buffer_info->meta_addr + META_SIZE * dst_block,

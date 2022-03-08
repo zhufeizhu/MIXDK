@@ -20,9 +20,9 @@ static const size_t threshold = 4096;
 
 static io_task_t* p_task;
 static atomic_int_fast64_t completed_read_task = 0;
-int mix_wait_for_task_completed(atomic_bool* flag) {
-    while (atomic_load(flag) == false) {
-    };
+
+int mix_wait_for_task_completed(int len, atomic_int_fast32_t* ret) {
+    while(*ret < len);
     completed_read_task++;
     return 0;
 }

@@ -8,11 +8,10 @@
 
 int thread_num = 0;
 int task_num = 0;
-
+char c = 0;
 size_t nvm_block_num = (size_t)(16) * 1024 * 1024;
 
 size_t offset = 0;  //
-
 
 #define BUF_LEN 1
 
@@ -20,8 +19,7 @@ size_t offset = 0;  //
 
 #define BLOCK_SIZE 4096
 
-#define BUF_SIZE BLOCK_SIZE * BUF_LEN
-
+#define BUF_SIZE BLOCK_SIZE* BUF_LEN
 
 char* buf1;
 char* buf2;
@@ -31,28 +29,31 @@ void* write_func(void* arg) {
     size_t flags = 0;
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
     for (size_t i = 0; i < task_num; i += thread_num) {
         // mixdk_read(buf2,BUF_LEN,i,0,i);
-        mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN,0,i);
-        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);    
+        memset(buf1,c+i,BUF_SIZE);
+        mixdk_write(buf1,1,nvm_block_num + i,0,i);
+        
+        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+3,0,i);
-        //mixdk_write(buf1,BUF_LEN, nvm_block_num + i*BUF_LEN+2,0,i);
-        //mixdk_read(buf2,BLOCK_NUM, nvm_block_num + i*BLOCK_NUM,0,i);
-        //printf("read %lld is %s\n",i,buf2);
+        // mixdk_write(buf1,BUF_LEN, nvm_block_num + i*BUF_LEN+2,0,i);
+        // mixdk_read(buf2,BLOCK_NUM, nvm_block_num + i*BLOCK_NUM,0,i);
+        
     }
-
+    mixdk_read(buf2, 10 * BUF_LEN, nvm_block_num, 0, 0);
+    printf("read is %s\n",buf2);
     // for (size_t i = 0; i < task_num; i += thread_num) {
     //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM,0,i);
-    //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+1,0,i);    
+    //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+1,0,i);
     //     mixdk_read(buf2,BLOCK_NUM, i*BLOCK_NUM,0,i);
     //     //printf("read is %s\n",buf2);
     // }
 
-    
-    //clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    //printf("time %d is %lu us\n", idx, (end.tv_sec - start.tv_sec) * 1000000 +
-                                   //(end.tv_nsec - start.tv_nsec) / 1000);
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    // printf("time %d is %lu us\n", idx, (end.tv_sec - start.tv_sec) * 1000000 +
+    //(end.tv_nsec - start.tv_nsec) / 1000);
     printf("over\n");
     return NULL;
 }
@@ -60,18 +61,19 @@ void* write_func(void* arg) {
 int main(int argc, char** argv) {
     thread_num = atoi(argv[1]);
     task_num = atoi(argv[2]);
-    char c = argv[3][0];
+    c = argv[3][0];
     printf("mix init begin\n");
     mixdk_init();
 
     printf("mix init succeed\n");
-    printf("task num is %d\n",task_num);
-    printf("thread num is %d\n",thread_num);
+    printf("task num is %d\n", task_num);
+    printf("thread num is %d\n", thread_num);
     printf("content is %c\n\n\n", c);
 
     buf1 = malloc(BUF_SIZE);
     memset(buf1, c, BUF_SIZE);
-    buf2 = malloc(BUF_SIZE);
+    buf2 = malloc(BUF_SIZE*20);
+    memset(buf2, 0, BUF_SIZE*20);
     // int n = 0;
     pthread_t* pids = malloc(sizeof(pthread_t*) * thread_num);
     struct timespec start, end;
@@ -79,7 +81,7 @@ int main(int argc, char** argv) {
     int* idx = (int*)malloc(sizeof(int) * thread_num);
     for (int i = 0; i < thread_num; i++) {
         idx[i] = 0;
-        if (pthread_create(pids + i, NULL, write_func,                                                                                                                (void*)(idx + i))) {
+        if (pthread_create(pids + i, NULL, write_func, (void*)(idx + i))) {
             perror("create thread");
             return 0;
         }
@@ -91,26 +93,25 @@ int main(int argc, char** argv) {
     int retry_time = 0;
     while (1) {
         current_task_num = mix_completed_task_num();
-        if (current_task_num == task_num*BUF_LEN)
+        if (current_task_num == task_num + 1)
             break;
         else {
             if (pre_task_num == current_task_num) {
                 retry_time++;
-                //printf("main retry time is %d and task num is %d\n", retry_time,
-                       //current_task_num);
+                // printf("main retry time is %d and task num is %d\n", retry_time,
+                // current_task_num);
                 // if(retry_time > 3) break;
             }
             pre_task_num = current_task_num;
-            //sleep(1);
+            // sleep(1);
         }
     }
-    printf("current task num is %d\n",current_task_num);
+    printf("current task num is %d\n", current_task_num);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     printf("time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
                                    (end.tv_nsec - start.tv_nsec) / 1000);
-    pthread_join(pids[0],NULL);
-    
-    
+    pthread_join(pids[0], NULL);
+
     // memset(buf1, c+1, BUF_SIZE);
     // for (int i = 0; i < thread_num; i++) {
     //     idx[i] = 1;
@@ -141,5 +142,4 @@ int main(int argc, char** argv) {
     //                                (end.tv_nsec - start.tv_nsec) / 1000);
     // pthread_join(pids[0],NULL);
     return 0;
-}
-
+} 

@@ -10,6 +10,16 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
 生成矢量图
 
 
+## 功能测试
+- [x] 小写nvm:实际写到nvm区域
+- [x] 小写ssd:实际写到buffer区域
+- [x] 大写ssd:先查询buffer并clear重复块的元数据 然后写到ssd区域
+- [x] 小读nvm:从nvm区域中读：
+- [x] 小读ssd:先查buffer再从ssd中读
+- [x] 大读ssd:将buffer和ssd的读取结果合并
+- [x] buffer迁移:buffer区读满以后迁移到ssd中
+- [x] 应用重启后重新简历索引
+
 ## 测试结果
 
 - block_size: 4k
@@ -41,8 +51,3 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
   --- | --- | --- | ---| --- | --- 
 时间 | 7ms | 14ms | 19ms | 25ms | 83ms
 带宽 | 570Mb/s | 570Mb/s | 630Mb/s | 640Mb/s | 192Mb/s
-
-
-功能测试内容
-1. 纯nvm小写 
-2. 纯ssd
