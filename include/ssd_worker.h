@@ -9,9 +9,9 @@
 
 ssd_info_t* mix_ssd_worker_init(unsigned int, unsigned int);
 
-int mix_post_task_to_ssd(io_task_t*);
+int mix_post_task_to_ssd(io_task_t*, int);
 
-atomic_int mix_get_completed_ssd_task_num();
+atomic_int mix_get_completed_ssd_write_block_num();
 
 atomic_bool mix_ssd_queue_is_empty();
 

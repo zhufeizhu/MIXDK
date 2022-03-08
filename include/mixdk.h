@@ -6,6 +6,7 @@
 #define MIX_LATENCY 1 << 3
 #define MIX_THROUGHOUT 1 << 4
 #define MIX_SYNC 1 << 5
+#define MIX_CLEAR 1 << 6
 
 #define NVM_BLOCK_SIZE (1<<12) //4096
 #define SSD_BLOCK_SIZE (1<<12)  //4096

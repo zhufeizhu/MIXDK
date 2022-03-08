@@ -19,10 +19,11 @@ static scheduler_ctx_t* sched_ctx = NULL;
 static const size_t threshold = 4096;
 
 static io_task_t* p_task;
-
+static atomic_int_fast64_t completed_read_task = 0;
 int mix_wait_for_task_completed(atomic_bool* flag) {
     while (atomic_load(flag) == false) {
     };
+    completed_read_task++;
     return 0;
 }
 
@@ -38,7 +39,7 @@ int mix_wait_for_task_completed(atomic_bool* flag) {
 // }
 
 size_t get_completed_task_num() {
-    return mix_get_completed_nvm_task_num() + mix_get_completed_ssd_task_num();
+    return completed_read_task + mix_get_completed_nvm_write_block_num() + mix_get_completed_ssd_write_block_num();
 }
 
 static atomic_int task_num = 0;
@@ -153,6 +154,7 @@ static void scheduler(void* arg) {
             //printf("empty\n");
             continue;
         }
+        //printf("not empty\n");
         io_task_t* new_task = handle_task(io_task);
 
         do_schedule(io_task);
@@ -238,7 +240,7 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
     sched_ctx->ssd_info = ssd_info;
     sched_ctx->nvm_info = nvm_info;
     sched_ctx->buffer_info = buffer_info;
-
+    p_task = malloc(sizeof(io_task_t));
     if (pthread_create(&scheduler_thread, NULL, (void*)scheduler, NULL)) {
         printf("create scheduler failed\n");
         return -1;

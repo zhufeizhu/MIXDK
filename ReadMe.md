@@ -1,3 +1,12 @@
+## 测试代码
+```shell
+blktrace -d /dev/nvme0n1
+blkparse -i nvme0n1 -d nvme0n1.blktrace.bin
+iowatcher -t nvme0n1.blktrace.bin -o disk.svg
+```
+生成矢量图
+
+
 ## 测试结果
 
 - block_size: 4k
@@ -23,11 +32,14 @@
   块大小 | 4k | 8k | 12k | 16K
    --- | --- | --- | --- | ---
   bw |  0.95G | 1.27G | 2.38G | 
-
-  测试发现相较于直接写nvm 写到buffer中的性能较写nvm增大了10倍(不涉及迁移的情况) 当涉及到迁移时这个性能会更低
   
   buffer区测结果
   总大小 | 4M | 8M | 12M | 16M(未触发migrate) | 16M(触发migrate)
   --- | --- | --- | ---| --- | --- 
 时间 | 7ms | 14ms | 19ms | 25ms | 83ms
 带宽 | 570Mb/s | 570Mb/s | 630Mb/s | 640Mb/s | 192Mb/s
+
+
+功能测试内容
+1. 纯nvm小写 
+2. 纯ssd

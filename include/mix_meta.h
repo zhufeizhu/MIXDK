@@ -42,7 +42,7 @@ void mix_metadata_free(mix_metadata_t* meta_data);
 
 int mix_get_next_free_block(mix_metadata_t* meta_data, int idx);
 
-void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task);
+void mix_clear_block(mix_metadata_t* meta_data, io_task_t* task, int idx);
 
 int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset, int idx);
 

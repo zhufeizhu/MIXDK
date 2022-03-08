@@ -16,7 +16,7 @@ static atomic_bool queue_empty;
 //设置队列任务的大小 测试发现当block的大小超过12k时 性能将不再随着block的
 //大小而增加 后面需要再详细测试一下
 static const int stripe_size = 4;
-static atomic_int completed_ssd_task_num = 0;
+static atomic_int completed_ssd_write_block_num = 0;
 static io_task_t ssd_task[SSD_QUEUE_NUM];
 static pthread_mutex_t ssd_mutex[SSD_QUEUE_NUM];
 static io_task_t post_task;
@@ -41,15 +41,12 @@ static inline int mix_write_to_ssd(void* src,
     return mix_ssd_write(src, len, offset, flags);
 }
 
-atomic_int mix_get_completed_ssd_task_num() {
-    return completed_ssd_task_num;
+atomic_int mix_get_completed_ssd_write_block_num() {
+    return completed_ssd_write_block_num;
 }
 
-static inline void mix_ssd_task_completed(io_task_t* task) {
-    completed_ssd_task_num++;
-    if (task->flag == NULL)
-        return;
-    atomic_store(task->flag, true);
+static inline void mix_ssd_write_block_completed(int nblock) {
+    completed_ssd_write_block_num += nblock;
 }
 
 io_task_t* get_task_from_ssd_queue(int idx) {
@@ -91,14 +88,13 @@ static void ssd_worker(void* arg) {
                 // local_time++;
                 ret = mix_write_to_ssd(task->buf, task->len, task->offset,
                                        task->opcode);
+                mix_ssd_write_block_completed(ret);
                 break;
             }
             default:
                 ret = 0;
                 break;
         }
-        task->ret = ret;
-        mix_ssd_task_completed(task);
         //free(task);
     }
     return;
@@ -143,25 +139,8 @@ ssd_info_t* mix_ssd_worker_init(unsigned int size, unsigned int esize) {
  * version 0.1.0版本只有一个ssd的任务队列
  **/
 
-int mix_post_task_to_ssd(io_task_t* task) {
-    int offset = task->offset;
-    int end = task->offset + task->len;
-    int idx = (post_task.offset / stripe_size)%SSD_QUEUE_NUM;
-    int len = 0;
-    while(offset < end){
-        post_task.offset = offset;
-        len = stripe_size - (post_task.offset % stripe_size);
-        post_task.len = (len > (end - post_task.offset))?(end-offset):len;
-        offset += post_task.len;
-        post_task.flag = task->flag;
-        post_task.buf = task->buf + (post_task.offset - task->offset) * SSD_BLOCK_SIZE;
-        post_task.opcode = task->opcode;
-        //printf("post task offset is %lld, len is %lld\n",post_task.offset,post_task.len);
-        pthread_mutex_lock(&ssd_mutex[idx]);
-        while (!mix_enqueue(ssd_queue[idx], &post_task, 1));
-        pthread_mutex_unlock(&ssd_mutex[idx]);
-        idx = (idx + 1)%SSD_QUEUE_NUM; 
-    }
+int mix_post_task_to_ssd(io_task_t* task, int idx) {
+    while (!mix_enqueue(ssd_queue[idx], task, 1));
     return 1;
 }
 

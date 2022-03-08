@@ -112,7 +112,8 @@ static inline void mix_ntstorenx64(const void* dst,
 }
 
 static inline void mix_clflushopt(const void* addr) {
-    asm volatile(".byte 0x66 clflush %0" : "+m"(*(volatile char*)(addr)));
+    asm volatile(".byte 0x66 clflush %0"
+                 : "+m"(*(volatile char*)(addr)));
 }
 
 static inline void mix_flushopt(const void* addr, size_t len) {
@@ -134,47 +135,32 @@ static inline void mix_flush(const void* addr, size_t len) {
 }
 
 size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
-    // size_t l = 0;
-    // if ((len + offset) > nvm_info->block_num) {
-    //     l = nvm_info->block_num - offset;
-    // } else {
-    //     l = len;
-    // }
-    //_mm_lfence();
     mix_ntstorenx64(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
                     len * BLOCK_SIZE);
-    // printf("[len] %d [offset] %d\n",l,offset);
-
+    // printf("[len] %lld [offset] %lld\n",len,offset);
     return len;
 }
 
 static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
-    //printf("write %lld task\n",local_time++);
-    mix_ntstorenx32(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
-    //memcpy(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
-    // printf("nvm task local time is %lld\n",local_time++);
-    //printf("[%lld]:[len] %lld [offset] %lld\n",local_time++,len,offset);
-
+    mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
+    //printf("[len] %lld [offset] %lld\n", len, offset);
     return len;
 }
 
 size_t mix_buffer_read(void* src, size_t dst_block, size_t flags) {
     buffer_meta_t meta;
 
-    mix_ntstorenx32(src, buffer_info->buffer_addr + dst_block * BLOCK_SIZE,
+    mix_ntstorenx64(src, buffer_info->buffer_addr + dst_block * BLOCK_SIZE,
                     BLOCK_SIZE);
-    mix_ntstorenx32(&meta, buffer_info->meta_addr + META_SIZE * dst_block,
-                    META_SIZE);
-    return BLOCK_SIZE;
+    return 1;
 }
 
 size_t mix_buffer_write(void* src,
                         size_t src_block,
                         size_t dst_block,
                         size_t flags) {
-    
     // struct timespec start, end;
     // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     buffer_meta_t meta;
@@ -187,15 +173,7 @@ size_t mix_buffer_write(void* src,
                     BLOCK_SIZE);
     mix_ntstorenx64(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
                     META_SIZE);
-    //printf("[%lld]:[len] %d [offset] %lld\n",local_time++,1,src_block);
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    // printf("data time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
-    //                                (end.tv_nsec - start.tv_nsec) / 1000);
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    // printf("meta time is %lu ns\n",
-    //                                (end.tv_nsec - start.tv_nsec));
-    return BLOCK_SIZE;
+    return 1;
 }
 
 void mix_buffer_clear(size_t dst_block) {
@@ -205,13 +183,13 @@ void mix_buffer_clear(size_t dst_block) {
 }
 
 void mix_buffer_record(size_t src_block,
-                        size_t dst_block,
-                        size_t flags){
+                       size_t dst_block,
+                       size_t flags) {
     buffer_meta_t meta;
     meta.flags = flags;
     meta.status = 1;
     meta.timestamp = 0;  //暂时不用
     meta.offset = src_block;
     mix_ntstorenx32(buffer_info->meta_addr + META_SIZE * dst_block, &meta,
-                     META_SIZE);
+                    META_SIZE);
 }

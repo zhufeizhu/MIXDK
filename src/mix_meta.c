@@ -98,7 +98,7 @@ int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
     if(meta_data->segments[idx].used_block_num == meta_data->per_block_num) return -1;
 
     //从free_segment中申请空闲块
-    return idx + SEGMENT_NUM * mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
+    return mix_bitmap_next_zero_bit(meta_data->segments[idx].bitmap);
 }
 
 /**
@@ -142,9 +142,9 @@ bool mix_write_redirect_blockmeta(mix_metadata_t* meta_data,
  * 3. 将对应的bitmap设置为clean
  * 需要保证以上为原子操作
  **/
-void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
-    for (int i = 0; i < task->len; i++) {
-        int idx = task->offset % SEGMENT_NUM;
+void mix_clear_block(mix_metadata_t* meta_data, io_task_t* task, int idx) {
+    //printf("clear block %lld\n",task->offset);
+    for(int i = 0; i < task->len; i++){
         // 查询是否在bloom_filter中
         // if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
         //                                     task->offset + i)) {
@@ -154,7 +154,7 @@ void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
         // 查询是否在hash中
         int value = mix_hash_get(meta_data->hash[idx], task->offset + i);
         if (value == -1) {
-            continue;
+            return;
         }
 
         //将key从bloom filter中移除
@@ -168,6 +168,7 @@ void mix_clear_blocks(mix_metadata_t* meta_data, io_task_t* task) {
         mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, bit);
         mix_buffer_clear(idx*meta_data->per_block_num + bit);
         meta_data->segments[idx].used_block_num--;
+        printf("clear block %lld\n",task->offset + i);
     }
 }
 
@@ -184,18 +185,18 @@ int mix_buffer_block_test(mix_metadata_t* meta_data, uint32_t offset, int idx) {
         //     continue;
         // }
 
-        value = mix_hash_get(meta_data->hash[idx], offset);
-        if (value == -1) {
-            return value;
-        }
-
-        int bit = value % meta_data->per_block_num;
-        if (!mix_bitmap_test_bit(meta_data->segments[idx].bitmap, bit)) {
-            value = -1;
-            return value;
-        }
-
+    value = mix_hash_get(meta_data->hash[idx], offset);
+    if (value == -1) {
         return value;
+    }
+
+    int bit = value % meta_data->per_block_num;
+    if (!mix_bitmap_test_bit(meta_data->segments[idx].bitmap, bit)) {
+        value = -1;
+        return value;
+    }
+
+    return value;
 }
 
 /**

@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 ssd_info_t* ssd_info;
+char* memalign_src = NULL;
+char* memalign_dst = NULL;
 
 /**
  * 打开裸设备进行读写
@@ -23,49 +25,46 @@ ssd_info_t* mix_ssd_init() {
         return NULL;
     }
     ssd_info->ssd_capacity = (size_t)400 * 1024 * 1024 * 1024;
+    memalign_src = valloc(4*4*SSD_BLOCK_SIZE); //最大的64k的对齐空间 预分配好64k的空间
+    memalign_dst = valloc(4*4*SSD_BLOCK_SIZE);
+    if(memalign_src == NULL || memalign_dst == NULL){
+        perror("malloc align memory failed!");
+        close(ssd_info->ssd_fd);
+        free(ssd_info);
+        return NULL;
+    }
     return ssd_info;
 }
 
 size_t mix_ssd_read(void* dst, size_t len, size_t offset, size_t flags) {
-    size_t l = len;
-    if ((len + offset) > ssd_info->ssd_capacity) {
-        l = ssd_info->ssd_capacity - offset;
-    }
+    size_t off = offset * SSD_BLOCK_SIZE;
+    size_t idx = (offset&15)/4;
+    size_t l = len * SSD_BLOCK_SIZE;
 
-    char* memalign_dst = valloc(l*SSD_BLOCK_SIZE);
-    int n = pread(ssd_info->ssd_fd, memalign_dst, l * SSD_BLOCK_SIZE,
-                  offset * SSD_BLOCK_SIZE);
-    memcpy(dst,memalign_dst,l*SSD_BLOCK_SIZE);
-    free(memalign_dst);
-    if (n <= 0) {
+    int n = pread(ssd_info->ssd_fd, memalign_dst + idx * 4 * SSD_BLOCK_SIZE, l, off);
+    memcpy(dst,memalign_dst + idx * 4 * SSD_BLOCK_SIZE,l);
+    if ( n <= 0) {
         perror("mix_ssd_read");
         return 0;
     }
-    return n;
+    return len;
 }
 
 static size_t local_time = 0;
 
 size_t mix_ssd_write(void* src, size_t len, size_t offset, size_t flag) {
     size_t off = offset * SSD_BLOCK_SIZE;
+    size_t idx = (offset&15)/4;
     size_t l = len * SSD_BLOCK_SIZE;
 
-    char* memalign_src = valloc(l*SSD_BLOCK_SIZE);
-    memcpy(memalign_src,src,l);
-    int n = pwrite(ssd_info->ssd_fd, memalign_src, l,off);
+    memcpy(memalign_src + idx * 4 * SSD_BLOCK_SIZE,src,l);
+    int n = pwrite(ssd_info->ssd_fd, memalign_src + idx * 4 * SSD_BLOCK_SIZE, l,off);
     //printf("mix ssd write: len:%llu, offset:%llu\n",l,off);
-    free(memalign_src);
+    //free(memalign_src);
     if (n <= 0) {
         perror("mix_ssd_write");
         return 0;
     }
 
-    if (flag & MIX_SYNC) {
-        local_time++;
-        // printf("%llu sync\n",local_time);
-        fsync(ssd_info->ssd_fd);
-        // fsync(ssd_info->ssd_fd);
-    }
-
-    return n;
+    return len;
 }
