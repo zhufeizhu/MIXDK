@@ -1,4 +1,7 @@
 ## 测试代码
+
+
+使用blktrace抓取block io并使用blkparse作图
 ```shell
 blktrace -d /dev/nvme0n1
 blkparse -i nvme0n1 -d nvme0n1.blktrace.bin
