@@ -33,6 +33,8 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
 否 | 6.5s  | 3.5s
 是 | 3.5s  | 2s
 
+
+
 - cmd: fio -filename=/dev/nvme0n1 -direct=1 -thread -rw=write -bs=16k -ioengine=psync -size=4g -iodepth=1 -numjobs=1 -group_reporting -name=test
 
 块大小\线程数 | 1 | 2 | 4 | 8 | 16 | 24

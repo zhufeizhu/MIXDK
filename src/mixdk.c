@@ -15,36 +15,39 @@
 
 const static uint8_t max_submit_queue_num = 16;
 
+static io_task_t* tasks;
+
 int mixdk_init(uint8_t submit_queue_num) {
     if(submit_queue_num <= 0 || submit_queue_num > 16) return -1;
-
+    tasks = malloc(sizeof(io_task_t)*submit_queue_num);
     mix_init_scheduler(4096 * TASK_SIZE, TASK_SIZE, submit_queue_num);
     return 0;
 }
+
+
 
 size_t mixdk_write(void* src,
                    size_t len,
                    size_t offset,
                    size_t flags,
                    int idx) {
-    io_task_t* task = malloc(sizeof(io_task_t));
-    task->buf = malloc(len*BLOCK_SIZE);
-    memcpy(task->buf,src,len*BLOCK_SIZE);
-    task->len = len;
-    task->offset = offset;
-    task->opcode = MIX_WRITE | flags;
-    task->ret = 0;
-    task->queue_idx = idx;
+    tasks[idx].buf = src;
+    //memcpy(task->buf,src,len*BLOCK_SIZE);
+    tasks[idx].len = len;
+    tasks[idx].offset = offset;
+    tasks[idx].opcode = MIX_WRITE | flags;
+    tasks[idx].ret = 0;
+    tasks[idx].queue_idx = idx;
 
     // printf("offset is %llu\n",offset);
 
-    int ind = mix_post_task_to_io(task);
+    int ind = mix_post_task_to_io(&tasks[idx]);
     if (ind < 0) {
         return 1;
     }
     // mix_wait_for_task_completed(ind);
     // int ret =  task->ret;
-    free(task);
+    //free(task);
     return 0;
     // return 0;
 }
@@ -69,6 +72,7 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx) {
     free(task);
     return 0;
 }
+
 size_t mix_completed_task_num() {
     return get_completed_task_num();
 }

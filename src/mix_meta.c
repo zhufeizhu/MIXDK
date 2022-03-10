@@ -144,7 +144,6 @@ bool mix_write_redirect_blockmeta(mix_metadata_t* meta_data,
  * 需要保证以上为原子操作
  **/
 void mix_clear_block(mix_metadata_t* meta_data, io_task_t* task, int idx) {
-    //printf("clear block %lld\n",task->offset);
     for(int i = 0; i < task->len; i++){
         // 查询是否在bloom_filter中
         // if (!mix_counting_bloom_filter_test(meta_data->bloom_filter[j],
@@ -169,7 +168,7 @@ void mix_clear_block(mix_metadata_t* meta_data, io_task_t* task, int idx) {
         mix_bitmap_clear_bit(meta_data->segments[idx].bitmap, bit);
         mix_buffer_clear(idx*meta_data->per_block_num + bit);
         meta_data->segments[idx].used_block_num--;
-        printf("clear block %lld\n",task->offset + i);
+        //printf("clear block %lld\n",task->offset + i);
     }
 }
 
@@ -215,7 +214,7 @@ void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
     char buf[4096];
     mix_buffer_read(buf,src,0);
     mix_buffer_clear(src);
-    mix_ssd_write(buf,1,dst,0);
+    mix_ssd_write(buf,1,dst,0,0);
 }
 
 /**

@@ -37,8 +37,8 @@ static inline int mix_read_from_ssd(void* dst,
 static inline int mix_write_to_ssd(void* src,
                                    size_t len,
                                    size_t offset,
-                                   size_t flags) {
-    return mix_ssd_write(src, len, offset, flags);
+                                   size_t flags,int idx) {
+    return mix_ssd_write(src, len, offset, flags, idx);
 }
 
 atomic_int mix_get_completed_ssd_write_block_num() {
@@ -88,7 +88,9 @@ static void ssd_worker(void* arg) {
                 // printf("mix write %d\n",local_time);
                 // local_time++;
                 ret = mix_write_to_ssd(task->buf, task->len, task->offset,
-                                       task->opcode);
+                                       task->opcode,idx);
+                
+                //ret = task->len;
                 mix_ssd_write_block_completed(ret);
                 break;
             }

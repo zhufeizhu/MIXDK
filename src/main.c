@@ -13,7 +13,7 @@ size_t nvm_block_num = (size_t)(16) * 1024 * 1024;
 
 size_t offset = 0;  //
 
-#define BUF_LEN 1
+#define BUF_LEN 4
 
 #define TASK
 
@@ -32,7 +32,7 @@ void* write_func(void* arg) {
     printf("idx is %d\n",idx);
     for (size_t i = 0; i < task_num; i += thread_num) {
         // mixdk_read(buf2,BUF_LEN,i,0,i);
-        mixdk_write(buf1,1,i,0,idx);
+        mixdk_write(buf1,BUF_LEN, nvm_block_num + (idx + i)*BUF_LEN,0,idx);
         
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
@@ -42,7 +42,6 @@ void* write_func(void* arg) {
         
     }
     // mixdk_read(buf2, 10 * BUF_LEN, nvm_block_num, 0, 0);
-    // printf("read is %s\n",buf2);
     // for (size_t i = 0; i < task_num; i += thread_num) {
     //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM,0,i);
     //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+1,0,i);
@@ -69,7 +68,7 @@ int main(int argc, char** argv) {
     printf("thread num is %d\n", thread_num);
     printf("content is %c\n\n\n", c);
 
-    buf1 = malloc(BUF_SIZE);
+    buf1 = valloc(BUF_SIZE);
     memset(buf1, c, BUF_SIZE);
     buf2 = malloc(BUF_SIZE*20);
     memset(buf2, 0, BUF_SIZE*20);
@@ -92,7 +91,7 @@ int main(int argc, char** argv) {
     int retry_time = 0;
     while (1) {
         current_task_num = mix_completed_task_num();
-        if (current_task_num == task_num)
+        if (current_task_num == task_num*BUF_LEN)
             break;
         else {
             if (pre_task_num == current_task_num) {
@@ -113,7 +112,7 @@ int main(int argc, char** argv) {
 
     // memset(buf1, c+1, BUF_SIZE);
     // for (int i = 0; i < thread_num; i++) {
-    //     idx[i] = 1;
+    //     idx[i] = i;
     //     if (pthread_create(pids + i, NULL, write_func, (void*)(idx + i))) {
     //         perror("create thread");
     //         return 0;
@@ -122,7 +121,7 @@ int main(int argc, char** argv) {
     // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     // while (1) {
     //     current_task_num = mix_completed_task_num();
-    //     if (current_task_num == 2*task_num*BLOCK_NUM)
+    //     if (current_task_num == 2*task_num)
     //         break;
     //     else {
     //         if (pre_task_num == current_task_num) {

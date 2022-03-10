@@ -50,21 +50,15 @@ size_t mix_ssd_read(void* dst, size_t len, size_t offset, size_t flags) {
     return len;
 }
 
-static size_t local_time = 0;
+static size_t local_time[4] = {0,0,0,0};
 
-size_t mix_ssd_write(void* src, size_t len, size_t offset, size_t flag) {
+size_t mix_ssd_write(void* src, size_t len, size_t offset, size_t flag, int idx) {
     size_t off = offset * SSD_BLOCK_SIZE;
-    size_t idx = (offset&15)/4;
     size_t l = len * SSD_BLOCK_SIZE;
 
-    memcpy(memalign_src + idx * 4 * SSD_BLOCK_SIZE,src,l);
-    int n = pwrite(ssd_info->ssd_fd, memalign_src + idx * 4 * SSD_BLOCK_SIZE, l,off);
-    //printf("[%lld]mix ssd write: len:%llu, offset:%llu\n",local_time++, l,off);
+    //memcpy(memalign_src + idx * 4 * SSD_BLOCK_SIZE,src,l);
+    //int n = pwrite(ssd_info->ssd_fd, src, l,off);
+    //printf("[%d-%lld]mix ssd write: len:%llu, offset:%llu\n",idx, local_time[idx]++,l,off);
     //free(memalign_src);
-    if (n <= 0) {
-        perror("mix_ssd_write");
-        return 0;
-    }
-
     return len;
 }

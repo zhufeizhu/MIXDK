@@ -15,6 +15,6 @@ ssd_info_t* mix_ssd_init();
 
 size_t mix_ssd_read(void*, size_t, size_t, size_t);
 
-size_t mix_ssd_write(void*, size_t, size_t, size_t);
+size_t mix_ssd_write(void*, size_t, size_t, size_t, int);
 
 #endif

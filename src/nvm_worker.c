@@ -115,9 +115,6 @@ static size_t redirect_read(io_task_t* task, int idx) {
     read_task.len = 0;
     read_task.opcode = MIX_READ;
     int offset = 0;
-    if(task->offset == 20){
-        printf("debug\n");
-    }
     for (int i = 0; i < task->len; i++) {
         if ((offset = mix_buffer_block_test(meta_data, task->offset + i, idx)) == -1) {
             if (read_task.offset == -1) {
@@ -236,16 +233,16 @@ static void nvm_worker(void* arg) {
         if (task->type == NVM_TASK) {
             switch (op_code) {
                 case MIX_READ: {
-                    ret = mix_read_from_nvm(task->buf, task->len, task->offset,
-                                            task->opcode);
-                   
+                    // ret = mix_read_from_nvm(task->buf, task->len, task->offset,
+                    //                         task->opcode);
+                    ret = 1;
                     *(task->ret) =  *(task->ret) + ret;
                     break;
                 };
                 case MIX_WRITE: {
                     ret = mix_write_to_nvm(task->buf, task->len, task->offset,
                                            task->opcode);
-                    printf("task num is %d\n",nvm_task_num++);
+                    //printf("task num is %d\n",nvm_task_num++);
                     mix_nvm_write_block_completed(ret);
                     break;
                 }
@@ -354,8 +351,7 @@ static atomic_int retry_time = 0;
  **/
 int mix_post_task_to_nvm(io_task_t* task) {
     // printf("post task to nvm %lld\n",task->offset);
-    while(mix_enqueue(nvm_queue[task->queue_idx], task, 1))
-        ;
+    while(!mix_enqueue(nvm_queue[task->queue_idx], task, 1));
     return 1;
 }
 
@@ -367,6 +363,9 @@ int mix_post_task_to_buffer(io_task_t* task) {
     int idx = (task->offset / stripe_size) % BUFFER_QUEUE_NUM;
     int len = 0;
     io_task_t post_task;
+    //mix_nvm_write_block_completed(task->len);
+
+
     while (offset < end) {
         post_task.offset = offset;
         len = stripe_size - (post_task.offset % stripe_size);
@@ -378,8 +377,8 @@ int mix_post_task_to_buffer(io_task_t* task) {
         post_task.ret = task->ret;
         // printf("%d post task offset is %lld, len is %lld\n",idx,post_task.offset,post_task.len);
         // pthread_mutex_lock(&ssd_mutex[idx]);
-        while (!mix_enqueue(buffer_queue[idx], &post_task, 1))
-            ;
+        while (!mix_enqueue(buffer_queue[idx], &post_task, 1));
+        
         // pthread_mutex_unlock(&ssd_mutex[idx]);
         idx = (idx + 1) % BUFFER_QUEUE_NUM;
     }

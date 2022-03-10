@@ -23,7 +23,6 @@ static atomic_int_fast64_t completed_read_task = 0;
 
 int mix_wait_for_task_completed(int len, atomic_int_fast32_t* ret) {
     while(*ret < len);
-    printf("%ld\n",completed_read_task);
     completed_read_task++;
     return 0;
 }
@@ -138,11 +137,11 @@ static void scheduler(void* arg) {
     while (1) {
         len = mix_dequeue(sched_ctx->submit_queue[idx], io_task, 1);
         idx = (idx+1)&mask;
-        if (len == 0) {
+        if (len == 0)
             continue;
-        }else{
-            printf("get from sched task num is %d\n",task_num++);
-        }
+        // }else{
+        //     printf("get from sched task num is %d\n",task_num++);
+        // }
         //printf("not empty\n");
         io_task_t* new_task = handle_task(io_task);
 
