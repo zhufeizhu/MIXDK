@@ -23,35 +23,22 @@ static atomic_int_fast64_t completed_read_task = 0;
 
 int mix_wait_for_task_completed(int len, atomic_int_fast32_t* ret) {
     while(*ret < len);
+    printf("%ld\n",completed_read_task);
     completed_read_task++;
     return 0;
 }
 
-// /**
-//  * 任务完成时的回调函数 这里只需要在读完成时回调即可
-// **/
-// static inline void mix_task_completed(io_task_t* task){
-//     assert(task != NULL);
-//     if(task->flag == NULL) return;
-
-//     atomic_store(task->flag,true);
-//     completed_task_num++;
-// }
 
 size_t get_completed_task_num() {
     return completed_read_task + mix_get_completed_nvm_write_block_num() + mix_get_completed_ssd_write_block_num();
 }
 
-static atomic_int task_num = 0;
+static atomic_int task_num = 1;
 static atomic_int retry_time = 0;
 
 int mix_post_task_to_io(io_task_t* task) {
-    int len = 0;
-    while (len == 0) {
-        len = mix_enqueue(sched_ctx->submit_queue, task, 1);
-    }
-
-    return len;
+    while (!mix_enqueue(sched_ctx->submit_queue[task->queue_idx], task, 1));
+    return 1;
 }
 
 /**
@@ -146,13 +133,15 @@ static void scheduler(void* arg) {
     int len = 0;
     int i = 0;
     io_task_t* io_task = malloc(TASK_SIZE);
+    uint8_t idx = 0;
+    uint8_t mask = sched_ctx->max_current - 1;
     while (1) {
-        // pthread_spin_lock(sched_ctx->schedule_queue_lock);
-        len = mix_dequeue(sched_ctx->submit_queue, io_task, 1);
-        // pthread_spin_unlock(sched_ctx->schedule_queue_lock);
+        len = mix_dequeue(sched_ctx->submit_queue[idx], io_task, 1);
+        idx = (idx+1)&mask;
         if (len == 0) {
-            //printf("empty\n");
             continue;
+        }else{
+            printf("get from sched task num is %d\n",task_num++);
         }
         //printf("not empty\n");
         io_task_t* new_task = handle_task(io_task);
@@ -173,7 +162,7 @@ static void scheduler(void* arg) {
  * @param max_current
  * @return int
  */
-int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
+int mix_init_scheduler(unsigned int size, unsigned int esize, uint8_t submit_queue_num) {
     pthread_t scheduler_thread = 0;
     ssd_info_t* ssd_info = NULL;
     nvm_info_t* nvm_info = NULL;
@@ -185,43 +174,21 @@ int mix_init_scheduler(unsigned int size, unsigned int esize, int max_current) {
         return -1;
     }
 
-    sched_ctx->max_current = max_current;
-    sched_ctx->submit_queue = mix_queue_init(size, esize);
-    if (sched_ctx->submit_queue == NULL) {
-        mix_log("mix_init_scheduler", "mix queue init failed");
+    sched_ctx->max_current = submit_queue_num;
+    sched_ctx->submit_queue = malloc(sched_ctx->max_current * sizeof(mix_queue_t*));
+    if(sched_ctx->submit_queue == NULL){
+        mix_log("mix_init_scheduler","malloc for submit queue failed");
         return -1;
     }
 
-    // sched_ctx->completation_conds =
-    //     malloc(sizeof(pthread_cond_t*) * max_current);
-    // if (sched_ctx->completation_conds == NULL) {
-    //     return -1;
-    // }
-    // for (int i = 0; i < max_current; i++) {
-    //     sched_ctx->completation_conds[i] = malloc(sizeof(pthread_cond_t));
-    //     if (sched_ctx->completation_conds[i] == NULL) {
-    //         return -1;
-    //     }
-    //     pthread_cond_init(sched_ctx->completation_conds[i], NULL);
-    // }
+    for(int i = 0; i < sched_ctx->max_current; i++){
+        sched_ctx->submit_queue[i] = mix_queue_init(size,esize);
+        if (sched_ctx->submit_queue[i] == NULL) {
+            mix_log("mix_init_scheduler", "mix queue init failed");
+            return -1;
+        }
+    }
 
-    // sched_ctx->ctx_mutex = malloc(sizeof(pthread_mutex_t*) * max_current);
-    // if (sched_ctx->ctx_mutex == NULL) {
-    //     return -1;
-    // }
-    // for (int i = 0; i < max_current; i++) {
-    //     sched_ctx->ctx_mutex[i] = malloc(sizeof(pthread_mutex_t));
-    //     if (sched_ctx->ctx_mutex[i] == NULL) {
-    //         return -1;
-    //     }
-    //     pthread_mutex_init(sched_ctx->ctx_mutex[i], NULL);
-    // }
-
-    // sched_ctx->schedule_queue_lock = malloc(sizeof(pthread_mutex_t));
-    // if (sched_ctx->schedule_queue_lock == NULL) {
-    //     return -1;
-    // }
-    // pthread_spin_init(sched_ctx->schedule_queue_lock, 1);
     ssd_info = mix_ssd_worker_init(size, esize);
     if (ssd_info == NULL) {
         return -1;

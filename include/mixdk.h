@@ -1,6 +1,7 @@
 #ifndef MIX_MIXDK_H
 #define MIX_MIXDK_H
 #include <unistd.h>
+#include <stdint.h>
 #define MIX_READ 1
 #define MIX_WRITE 1 << 2
 #define MIX_LATENCY 1 << 3
@@ -13,7 +14,7 @@
 
 #define size_t unsigned long long
 
-int mixdk_init();
+int mixdk_init(uint8_t submit_queue_num);
 
 size_t mixdk_write(void* buf, size_t len, size_t offset, size_t flags, int idx);
 

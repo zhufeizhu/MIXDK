@@ -14,17 +14,14 @@
 #define WRITE_AHEAD 1
 
 typedef struct scheduler_ctx {
-    mix_queue_t* submit_queue;
-    int max_current;
-    pthread_cond_t** completation_conds;
-    pthread_mutex_t** ctx_mutex;
-    pthread_spinlock_t* schedule_queue_lock;
+    mix_queue_t** submit_queue;
+    uint8_t max_current;
     ssd_info_t* ssd_info;  // ssd的信息
     nvm_info_t* nvm_info;  // nvm的信息
     buffer_info_t* buffer_info;
 } scheduler_ctx_t;
 
-int mix_init_scheduler(unsigned int, unsigned int, int);
+int mix_init_scheduler(unsigned int, unsigned int, uint8_t);
 
 int mix_post_task_to_io(io_task_t*);
 

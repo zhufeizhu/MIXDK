@@ -29,11 +29,10 @@ void* write_func(void* arg) {
     size_t flags = 0;
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-
+    printf("idx is %d\n",idx);
     for (size_t i = 0; i < task_num; i += thread_num) {
         // mixdk_read(buf2,BUF_LEN,i,0,i);
-        memset(buf1,c+i,BUF_SIZE);
-        mixdk_write(buf1,1,nvm_block_num + i,0,i);
+        mixdk_write(buf1,1,i,0,idx);
         
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
@@ -42,8 +41,8 @@ void* write_func(void* arg) {
         // mixdk_read(buf2,BLOCK_NUM, nvm_block_num + i*BLOCK_NUM,0,i);
         
     }
-    mixdk_read(buf2, 10 * BUF_LEN, nvm_block_num, 0, 0);
-    printf("read is %s\n",buf2);
+    // mixdk_read(buf2, 10 * BUF_LEN, nvm_block_num, 0, 0);
+    // printf("read is %s\n",buf2);
     // for (size_t i = 0; i < task_num; i += thread_num) {
     //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM,0,i);
     //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+1,0,i);
@@ -63,7 +62,7 @@ int main(int argc, char** argv) {
     task_num = atoi(argv[2]);
     c = argv[3][0];
     printf("mix init begin\n");
-    mixdk_init();
+    mixdk_init(thread_num);
 
     printf("mix init succeed\n");
     printf("task num is %d\n", task_num);
@@ -80,7 +79,7 @@ int main(int argc, char** argv) {
 
     int* idx = (int*)malloc(sizeof(int) * thread_num);
     for (int i = 0; i < thread_num; i++) {
-        idx[i] = 0;
+        idx[i] = i;
         if (pthread_create(pids + i, NULL, write_func, (void*)(idx + i))) {
             perror("create thread");
             return 0;
@@ -93,7 +92,7 @@ int main(int argc, char** argv) {
     int retry_time = 0;
     while (1) {
         current_task_num = mix_completed_task_num();
-        if (current_task_num == task_num + 1)
+        if (current_task_num == task_num)
             break;
         else {
             if (pre_task_num == current_task_num) {

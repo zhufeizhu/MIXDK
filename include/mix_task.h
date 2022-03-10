@@ -27,8 +27,6 @@ typedef struct io_task {
     size_t opcode;  //读写的操作码
     // size_t task_index;//
     __uint8_t type;  //读写的类型 如对NVM的读写还是对SSD的读写
-    __uint8_t redirect;   //表示是否重定向
-    atomic_bool* flag;    //标明当前任务是否完成
     __uint8_t queue_idx;  //标明当前任务所在队列的索引
 } __attribute__((packed)) io_task_t;
 

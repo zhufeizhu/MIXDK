@@ -29,7 +29,7 @@ static io_task_t buffer_task[NVM_QUEUE_NUM];
 static atomic_bool rebuild = false;
 
 
-_Atomic int completed_nvm_write_block_num = 0;
+atomic_int_fast32_t completed_nvm_write_block_num = 0;
 
 void mix_migrate_segment(int idx);
 
@@ -71,7 +71,9 @@ static inline size_t mix_write_to_buffer(void* dst,
 }
 
 static inline void mix_nvm_write_block_completed(int nblock) {
-    completed_nvm_write_block_num += nblock;
+    atomic_fetch_add_explicit(&completed_nvm_write_block_num,nblock,memory_order_relaxed);
+    //completed_nvm_write_block_num = completed_nvm_write_block_num + nblock;
+    //printf("%ld\n",completed_nvm_write_block_num);
 }
 
 atomic_int mix_get_completed_nvm_write_block_num() {
@@ -112,7 +114,6 @@ static size_t redirect_read(io_task_t* task, int idx) {
     read_task.offset = -1;  //一个很大的整数
     read_task.len = 0;
     read_task.opcode = MIX_READ;
-    read_task.flag = task->flag;
     int offset = 0;
     if(task->offset == 20){
         printf("debug\n");
@@ -194,7 +195,7 @@ void mix_migrate_segment(int idx) {
     mix_migrate(meta_data, segment_idx);
     mix_segment_migration_end(meta_data, segment_idx);
 }
-atomic_int empty_num = 0;
+static atomic_int nvm_task_num = 0;
 // atomic_int task_num = 0;
 
 static struct timespec start, end;
@@ -237,12 +238,14 @@ static void nvm_worker(void* arg) {
                 case MIX_READ: {
                     ret = mix_read_from_nvm(task->buf, task->len, task->offset,
                                             task->opcode);
+                   
                     *(task->ret) =  *(task->ret) + ret;
                     break;
                 };
                 case MIX_WRITE: {
                     ret = mix_write_to_nvm(task->buf, task->len, task->offset,
                                            task->opcode);
+                    printf("task num is %d\n",nvm_task_num++);
                     mix_nvm_write_block_completed(ret);
                     break;
                 }
@@ -369,13 +372,10 @@ int mix_post_task_to_buffer(io_task_t* task) {
         len = stripe_size - (post_task.offset % stripe_size);
         post_task.len = (len > (end - post_task.offset)) ? (end - offset) : len;
         offset += post_task.len;
-        post_task.flag = task->flag;
         post_task.buf = task->buf + (post_task.offset - task->offset) * SSD_BLOCK_SIZE;
         post_task.opcode = task->opcode;
         post_task.type = task->type;
         post_task.ret = task->ret;
-        post_task.flag = task->flag;
-        post_task.queue_idx = idx;
         // printf("%d post task offset is %lld, len is %lld\n",idx,post_task.offset,post_task.len);
         // pthread_mutex_lock(&ssd_mutex[idx]);
         while (!mix_enqueue(buffer_queue[idx], &post_task, 1))

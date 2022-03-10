@@ -13,8 +13,12 @@
 #include "mix_task.h"
 #include "scheduler.h"
 
-int mixdk_init() {
-    mix_init_scheduler(4096 * TASK_SIZE, TASK_SIZE, 4096);
+const static uint8_t max_submit_queue_num = 16;
+
+int mixdk_init(uint8_t submit_queue_num) {
+    if(submit_queue_num <= 0 || submit_queue_num > 16) return -1;
+
+    mix_init_scheduler(4096 * TASK_SIZE, TASK_SIZE, submit_queue_num);
     return 0;
 }
 
@@ -30,8 +34,7 @@ size_t mixdk_write(void* src,
     task->offset = offset;
     task->opcode = MIX_WRITE | flags;
     task->ret = 0;
-    // task->task_index = idx;
-    // task->flag = NULL;
+    task->queue_idx = idx;
 
     // printf("offset is %llu\n",offset);
 
@@ -53,6 +56,7 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx) {
     task->offset = offset;
     task->opcode = MIX_READ | flags;
     task->ret = malloc(sizeof(atomic_int_fast32_t));
+    task->queue_idx = idx;
     *(task->ret) = 0;
 
     int ind = mix_post_task_to_io(task);

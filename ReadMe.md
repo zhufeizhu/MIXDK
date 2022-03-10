@@ -20,6 +20,8 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
 - [x] buffer迁移:buffer区读满以后迁移到ssd中
 - [x] 应用重启后重新简历索引
 
+
+
 ## 测试结果
 
 - block_size: 4k
