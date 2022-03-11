@@ -4,7 +4,7 @@
 
 class MixBitmapTest:public ::testing::Test{
 protected:
-     void SetUp() override;
+    void SetUp() override;
     void TearDown() override;
 public:
     mix_bitmap_t* bitmap;
@@ -20,6 +20,10 @@ void MixBitmapTest::TearDown(){
 
 TEST_F(MixBitmapTest,BitmapInitTest){
     EXPECT_NE(bitmap,nullptr);
+}
+
+TEST_F(MixBitmapTest,test1){
+
 }
 
 TEST_F(MixBitmapTest,BitmapSetTest){

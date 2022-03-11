@@ -43,7 +43,6 @@ int main(int argc, char** argv){
         return -1;
     }
 
-
     // char* buf1 = "hello world";
     // int len = strlen(buf1);
     // printf("%d\n",len);

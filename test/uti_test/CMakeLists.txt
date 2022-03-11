@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.1)
 project(my_project)
 
 # GoogleTest requires at least C++11
@@ -68,3 +68,6 @@ target_link_libraries(
 
 include(GoogleTest)
 gtest_discover_tests(mix_hash_unittest mix_bitmap_unittest)
+
+
+add_custom_command()

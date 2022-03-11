@@ -57,7 +57,7 @@ size_t mix_ssd_write(void* src, size_t len, size_t offset, size_t flag, int idx)
     size_t l = len * SSD_BLOCK_SIZE;
 
     //memcpy(memalign_src + idx * 4 * SSD_BLOCK_SIZE,src,l);
-    //int n = pwrite(ssd_info->ssd_fd, src, l,off);
+    pwrite(ssd_info->ssd_fd, src, l,off);
     //printf("[%d-%lld]mix ssd write: len:%llu, offset:%llu\n",idx, local_time[idx]++,l,off);
     //free(memalign_src);
     return len;
