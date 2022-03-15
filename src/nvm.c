@@ -74,7 +74,7 @@ buffer_info_t* mix_buffer_init() {
         mix_log("mix_buffer_init", "malloc for buffer info failed");
         return NULL;
     }
-
+    buffer_info->segment_num = 4;
     buffer_info->block_num = 4 * 1024;  //总共分成4块 一块有空间 一共占用8m
     buffer_info->buffer_capacity =
         (size_t)buffer_info->block_num * (4096 + sizeof(buffer_meta_t));
@@ -137,7 +137,6 @@ static inline void mix_flush(const void* addr, size_t len) {
 size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
     mix_ntstorenx64(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
                     len * BLOCK_SIZE);
-    // printf("[len] %lld [offset] %lld\n",len,offset);
     return len;
 }
 
@@ -145,13 +144,10 @@ static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
     mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
-    // printf("[len] %lld [offset] %lld\n", len, offset);
     return len;
 }
 
 size_t mix_buffer_read(void* src, size_t dst_block, size_t flags) {
-    buffer_meta_t meta;
-
     mix_ntstorenx64(src, buffer_info->buffer_addr + dst_block * BLOCK_SIZE,
                     BLOCK_SIZE);
     return 1;

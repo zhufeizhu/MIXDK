@@ -267,6 +267,12 @@ void mix_hash_free(mix_hash_t* hash) {
     return;
 }
 
+/**
+ * @brief 从mix_hash中依次读取每个kv并删除 类似于iterator
+ * 
+ * @param hash meta中的hash
+ * @return mix_kv_t 返回的kv
+ */
 mix_kv_t mix_hash_get_entry(mix_hash_t* hash) {
     mix_kv_t kv;
     kv.key = -1;

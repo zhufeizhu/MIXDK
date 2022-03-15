@@ -12,8 +12,8 @@
 
 #define NVM_QUEUE_NUM 4
 #define BUFFER_QUEUE_NUM 4
-#define BLOCK_SZIE 4096
 
+static const int block_size = 4096;
 static const int threshold = 1;
 static const int stripe_size = 4;
 static mix_queue_t** nvm_queue = NULL;
@@ -71,9 +71,7 @@ static inline size_t mix_write_to_buffer(void* dst,
 }
 
 static inline void mix_nvm_write_block_completed(int nblock) {
-    atomic_fetch_add_explicit(&completed_nvm_write_block_num,nblock,memory_order_relaxed);
-    //completed_nvm_write_block_num = completed_nvm_write_block_num + nblock;
-    //printf("%ld\n",completed_nvm_write_block_num);
+    atomic_fetch_add_explicit(&completed_nvm_write_block_num,nblock,memory_order_relaxed);;
 }
 
 atomic_int mix_get_completed_nvm_write_block_num() {
@@ -161,9 +159,9 @@ static int redirect_write(io_task_t* task, int idx) {
             //如果不在buffer中
             offset = mix_get_next_free_block(meta_data, idx);
             if (offset == -1) {
-                printf("migrate begin %d\n", idx);
+                printf("[migrate begin %d]\n", idx);
                 mix_migrate_segment(idx);
-                printf("migrate end %d\n", idx);
+                printf("[migrate end %d]\n", idx);
                 offset = mix_get_next_free_block(meta_data, idx);
             }
             mix_write_redirect_blockmeta(meta_data, idx, task->offset, offset);
@@ -203,8 +201,8 @@ static atomic_int_fast8_t rebuild_num = 0;
 
 static void nvm_worker(void* arg) {
     int idx = *(int*)arg;  //当前线程对应的队列序号
-    printf("nvm worker %d init\n", idx);
 
+    printf("[nvm worker %d init]\n", idx);
     pthread_mutex_lock(&mutex[idx]);
     while(!rebuild) pthread_cond_wait(&rebuild_cond,&mutex[idx]);
     if(mix_buffer_rebuild(meta_data,idx)){
@@ -259,9 +257,7 @@ static void nvm_worker(void* arg) {
                     break;
                 }
                 case MIX_WRITE: {
-                    // printf("redirect_write %d\n",empty_num++);
                     ret = redirect_write(task, idx);
-                    // printf("redirect ret is %d\n",ret);
                     mix_nvm_write_block_completed(ret);
                     pthread_mutex_unlock(&mutex[idx]);
                     break;

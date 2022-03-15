@@ -50,8 +50,6 @@ size_t mix_ssd_read(void* dst, size_t len, size_t offset, size_t flags) {
 }
 
 
-
-
 size_t mix_ssd_write(void* src, size_t len, size_t offset, size_t flag, int idx) {
     size_t off = offset * SSD_BLOCK_SIZE;
     size_t l = len * SSD_BLOCK_SIZE;

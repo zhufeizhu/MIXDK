@@ -117,8 +117,7 @@ void do_schedule(io_task_t* task) {
             break;
         };
         case SSD_TASK: {
-            mix_post_task_to_buffer(
-                task);  // ssd的任务需要经过buffer进行处理之后执行
+            mix_post_task_to_buffer(task);  // ssd的任务需要经过buffer进行处理之后执行
             break;
         };
         default: {
@@ -134,14 +133,12 @@ static void scheduler(void* arg) {
     io_task_t* io_task = malloc(TASK_SIZE);
     uint8_t idx = 0;
     uint8_t mask = sched_ctx->max_current - 1;
-    while (1) {
+    while (likely(true)) {
         len = mix_dequeue(sched_ctx->submit_queue[idx], io_task, 1);
         idx = (idx+1)&mask;
-        if (unlikely(len == 0))
+        if (unlikely(len == 0)){
             continue;
-        // }else{
-        //     printf("get from sched task num is %d\n",task_num++);
-        // }
+        }
         //printf("not empty\n");
         io_task_t* new_task = handle_task(io_task);
 
@@ -151,6 +148,7 @@ static void scheduler(void* arg) {
             do_schedule(new_task);
         }
     }
+    return;
 }
 
 /**

@@ -18,6 +18,7 @@ typedef struct buffer_info {
     void* meta_addr;    // buffer的字描述块地址
     size_t block_num;
     size_t buffer_capacity;
+    uint8_t segment_num;
 } buffer_info_t;
 
 typedef struct buffer_meta {

@@ -231,7 +231,6 @@ void mix_migrate(mix_metadata_t* meta_data, int idx) {
             continue;
         migrate_from_buffer_to_ssd(kv.value, kv.key);
         //mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
-        //mix_hash_delete(meta_data->hash[idx],kv.key);
         meta_data->segments[idx].used_block_num--;
     }
     mix_bitmap_clear(meta_data->segments[idx].bitmap);

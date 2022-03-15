@@ -33,7 +33,7 @@ void* write_func(void* arg) {
     for (size_t i = 0; i < task_num; i += thread_num) {
         // mixdk_read(buf2,BUF_LEN,i,0,i);
         mixdk_read(buf2,BUF_LEN, nvm_block_num + (idx + i*thread_num)*BUF_LEN,0,idx);
-        
+
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+3,0,i);
