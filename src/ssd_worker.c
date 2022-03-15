@@ -46,7 +46,7 @@ atomic_int mix_get_completed_ssd_write_block_num() {
 }
 
 static inline void mix_ssd_write_block_completed(int nblock) {
-    completed_ssd_write_block_num += nblock;
+    atomic_fetch_add_explicit(&completed_ssd_write_block_num,nblock,memory_order_relaxed);
 }
 
 io_task_t* get_task_from_ssd_queue(int idx) {
@@ -81,7 +81,7 @@ static void ssd_worker(void* arg) {
             case MIX_READ: {
                 ret = mix_read_from_ssd(task->buf, task->len, task->offset,
                                         task->opcode);
-                *(task->ret) =  *(task->ret) + ret;
+                atomic_fetch_add_explicit(task->ret,ret,memory_order_relaxed);
                 break;
             };
             case MIX_WRITE: {

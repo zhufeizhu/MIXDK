@@ -233,10 +233,9 @@ static void nvm_worker(void* arg) {
         if (task->type == NVM_TASK) {
             switch (op_code) {
                 case MIX_READ: {
-                    // ret = mix_read_from_nvm(task->buf, task->len, task->offset,
-                    //                         task->opcode);
-                    ret = 1;
-                    *(task->ret) =  *(task->ret) + ret;
+                    ret = mix_read_from_nvm(task->buf, task->len, task->offset,
+                                            task->opcode);
+                    atomic_fetch_add_explicit(task->ret,ret,memory_order_relaxed);
                     break;
                 };
                 case MIX_WRITE: {
@@ -255,7 +254,7 @@ static void nvm_worker(void* arg) {
             switch (op_code) {
                 case MIX_READ: {
                     ret = redirect_read(task, idx);
-                    *(task->ret) =  *(task->ret) + ret;
+                    atomic_fetch_add_explicit(task->ret,ret,memory_order_relaxed);
                     pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }

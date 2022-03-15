@@ -12,6 +12,9 @@
 #define NVM_BLOCK_SIZE (1<<12) //4096
 #define SSD_BLOCK_SIZE (1<<12)  //4096
 
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
+
 #define size_t unsigned long long
 
 int mixdk_init(uint8_t submit_queue_num);

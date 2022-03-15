@@ -137,7 +137,7 @@ static void scheduler(void* arg) {
     while (1) {
         len = mix_dequeue(sched_ctx->submit_queue[idx], io_task, 1);
         idx = (idx+1)&mask;
-        if (len == 0)
+        if (unlikely(len == 0))
             continue;
         // }else{
         //     printf("get from sched task num is %d\n",task_num++);

@@ -32,7 +32,7 @@ void* write_func(void* arg) {
     printf("idx is %d\n",idx);
     for (size_t i = 0; i < task_num; i += thread_num) {
         // mixdk_read(buf2,BUF_LEN,i,0,i);
-        mixdk_write(buf1,BUF_LEN, nvm_block_num + (idx + i*thread_num)*BUF_LEN,0,idx);
+        mixdk_read(buf2,BUF_LEN, nvm_block_num + (idx + i*thread_num)*BUF_LEN,0,idx);
         
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
         // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
     int retry_time = 0;
     while (1) {
         current_task_num = mix_completed_task_num();
-        if (current_task_num == task_num*BUF_LEN)
+        if (current_task_num == task_num)
             break;
         else {
             if (pre_task_num == current_task_num) {
