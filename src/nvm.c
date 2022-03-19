@@ -45,6 +45,8 @@ void mix_mmap(nvm_info_t* nvm_info, buffer_info_t* buffer_info) {
         return;
     }
 
+    
+
     nvm_info->nvm_addr = mmap_addr;
     buffer_info->meta_addr = mmap_addr + nvm_info->nvm_capacity;
     buffer_info->buffer_addr =

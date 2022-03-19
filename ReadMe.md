@@ -55,3 +55,47 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
   --- | --- | --- | ---| --- | --- 
 时间 | 7ms | 14ms | 19ms | 25ms | 83ms
 带宽 | 570Mb/s | 570Mb/s | 630Mb/s | 640Mb/s | 192Mb/s
+
+# 测试
+1. 安装pmdk的一些依赖 执行如下命令
+```shell
+sudo apt install autoconf automake pkg-config libglib2.0-dev libfabric-dev pandoc libncurses5-dev
+```
+2. 安装编译环境
+```shell
+sudo apt install gcc g++
+```
+3. 下载pmdk
+```shell
+git clone https://github.com/pmem/pmdk
+```
+如果下载不了 就从https://github.com/pmem/pmdk/archive/master.zip下载
+4. 编译
+```shell
+cd pmdk && make
+```
+如果make遇到问题 例如某些deb的版本较低 可以到http://mirrors.aliyun.com/ubuntu/pool/main/n/ndctl/下载对应的deb 然后使用dpkg -i进行安装
+5. 安装
+```shell
+make install
+```
+
+## libpmemblk测试
+
+一共写4G
+
+块大小\时间(ms) | 4k | 8k | 12k | 16K | 24k | 32k
+--- | --- | --- | --- | --- | --- | ---
+cold | 55138 | 50333 | 48834 | 48243 | 47171 | 46563
+hot |  13507 | 9589 |  8228 | 7535 | 6905 | 6580
+
+
+## filebench测试
+1. 安装filebench
+https://blog.csdn.net/chongdajerry/article/details/79976660
+
+2. 到/usr/local/share/filebench/workloads目录下通过
+```shell
+  filebench -f xxxx.f
+```
+执行对应的workloads  如果出现
