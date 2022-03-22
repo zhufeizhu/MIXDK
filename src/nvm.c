@@ -137,6 +137,7 @@ static inline void mix_flush(const void* addr, size_t len) {
 }
 
 size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
+    //printf("mix nvm read is [%lld,%lld]\n",offset,len);
     mix_ntstorenx64(dst, nvm_info->nvm_addr + offset * BLOCK_SIZE,
                     len * BLOCK_SIZE);
     return len;
@@ -145,6 +146,7 @@ size_t mix_nvm_read(void* dst, size_t len, size_t offset, size_t flags) {
 static _Atomic size_t local_time = 0;
 
 size_t mix_nvm_write(void* src, size_t len, size_t offset, size_t flags) {
+    //printf("mix nvm write is [%lld,%lld]\n",offset,len);
     mix_ntstorenx64(nvm_info->nvm_addr + offset * BLOCK_SIZE, src, len * BLOCK_SIZE);
     return len;
 }

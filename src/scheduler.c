@@ -16,7 +16,8 @@
 
 //数据定义区
 static scheduler_ctx_t* sched_ctx = NULL;
-static const size_t threshold = 4096;
+static const size_t threshold = 1928765;
+
 
 static io_task_t* p_task;
 static atomic_int_fast64_t completed_read_task = 0;
@@ -49,7 +50,7 @@ int mix_post_task_to_io(io_task_t* task) {
  */
 static inline io_task_t* handle_task(io_task_t* task) {
     //当前task的offset都在nvm的范围内
-    if ((size_t)(task->offset + task->len) < sched_ctx->nvm_info->block_num) {
+    if ((size_t)(task->offset + task->len) < threshold) {
         // printf("nvm task\n");
         // 还未考虑跨区的问题
         int queue_idx1 = (task->offset / 2 )% 4;
@@ -75,28 +76,28 @@ static inline io_task_t* handle_task(io_task_t* task) {
     }
 
     //当前task的offset都在ssd的范围内
-    if ((size_t)task->offset >= sched_ctx->nvm_info->block_num) {
+    if ((size_t)task->offset >= threshold) {
         task->offset -= sched_ctx->nvm_info->block_num;
         task->type = SSD_TASK;
         return NULL;
     }
 
-    //当前task跨过了nvm和ssd两个区域 基本上不会存在
-    if ((size_t)task->offset < sched_ctx->nvm_info->block_num &&
-        (size_t)(task->offset + task->len) > sched_ctx->nvm_info->block_num) {
-        size_t len1 = sched_ctx->nvm_info->block_num - (size_t)task->offset;
-        size_t len2 =
-            (size_t)(task->offset + task->len) - sched_ctx->nvm_info->block_num;
+    // //当前task跨过了nvm和ssd两个区域 基本上不会存在
+    // if ((size_t)task->offset < sched_ctx->nvm_info->block_num &&
+    //     (size_t)(task->offset + task->len) > sched_ctx->nvm_info->block_num) {
+    //     size_t len1 = sched_ctx->nvm_info->block_num - (size_t)task->offset;
+    //     size_t len2 =
+    //         (size_t)(task->offset + task->len) - sched_ctx->nvm_info->block_num;
 
-        task->len = len1;
-        task->type = NVM_TASK;
+    //     task->len = len1;
+    //     task->type = NVM_TASK;
 
-        p_task->len = len2;
-        p_task->offset = task->offset + len1;
-        p_task->type = SSD_TASK;
-        p_task->buf = task->buf + len1 * BLOCK_SIZE;
-        return p_task;
-    }
+    //     p_task->len = len2;
+    //     p_task->offset = task->offset + len1;
+    //     p_task->type = SSD_TASK;
+    //     p_task->buf = task->buf + len1 * BLOCK_SIZE;
+    //     return p_task;
+    // }
 
     // printf("[task offset]:%llu\n [nvm_size]:%llu\n
     // [ssd_size]:%llu\n",(size_t)task->offset,nvm_size,ssd_size);

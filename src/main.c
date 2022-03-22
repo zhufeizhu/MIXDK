@@ -23,36 +23,33 @@ size_t offset = 0;  //
 
 char* buf1;
 char* buf2;
+char* path;
 
 void* write_func(void* arg) {
     int idx = *(int*)arg;
     size_t flags = 0;
     struct timespec start, end;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    printf("idx is %d\n",idx);
-    for (size_t i = 0; i < task_num; i += thread_num) {
-        // mixdk_read(buf2,BUF_LEN,i,0,i);
-        mixdk_read(buf2,BUF_LEN, nvm_block_num + (idx + i*thread_num)*BUF_LEN,0,idx);
-
-        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
-        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+2,0,i);
-        // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+3,0,i);
-        // mixdk_write(buf1,BUF_LEN, nvm_block_num + i*BUF_LEN+2,0,i);
-        // mixdk_read(buf2,BLOCK_NUM, nvm_block_num + i*BLOCK_NUM,0,i);
-        
+    //printf("path is:%s\n",path);
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    FILE* file = fopen(path,"r");
+    if(file == NULL) {
+        printf("no file\n");
+        return 0;
     }
-    // mixdk_read(buf2, 10 * BUF_LEN, nvm_block_num, 0, 0);
-    // for (size_t i = 0; i < task_num; i += thread_num) {
-    //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM,0,i);
-    //     // mixdk_write(buf1,1,nvm_block_num + i*BLOCK_NUM+1,0,i);
-    //     mixdk_read(buf2,BLOCK_NUM, i*BLOCK_NUM,0,i);
-    //     //printf("read is %s\n",buf2);
-    // }
-
+    char type;
+    int offset;
+    int num;
+    while(!feof(file)){
+        fscanf(file,"%c,%d,%d",&type,&offset,&num);
+        if(type == 'W'){
+            //printf("offset is %d, nblock is %d\n",offset,num);
+            mixdk_write(buf1,num,offset,0,0);
+        }
+    }
     // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    // printf("time %d is %lu us\n", idx, (end.tv_sec - start.tv_sec) * 1000000 +
-    //(end.tv_nsec - start.tv_nsec) / 1000);
-    printf("over\n");
+    // printf("generate task time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
+    //                                (end.tv_nsec - start.tv_nsec) / 1000);
+    // mixdk_write(buf1,1,nvm_block_num + i*BUF_LEN+1,0,i);
     return NULL;
 }
 
@@ -60,6 +57,7 @@ int main(int argc, char** argv) {
     thread_num = atoi(argv[1]);
     task_num = atoi(argv[2]);
     c = argv[3][0];
+    path = argv[4];
     printf("mix init begin\n");
     mixdk_init(thread_num);
 
@@ -104,11 +102,12 @@ int main(int argc, char** argv) {
             // sleep(1);
         }
     }
+    pthread_join(pids[0], NULL);
     printf("current task num is %d\n", current_task_num);
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     printf("time is %lu us\n", (end.tv_sec - start.tv_sec) * 1000000 +
                                    (end.tv_nsec - start.tv_nsec) / 1000);
-    pthread_join(pids[0], NULL);
+    //pthread_join(pids[0], NULL);
 
     // memset(buf1, c+1, BUF_SIZE);
     // for (int i = 0; i < thread_num; i++) {

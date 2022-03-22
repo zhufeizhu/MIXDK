@@ -75,7 +75,7 @@ static void ssd_worker(void* arg) {
             continue;
         }
         //printf("ssd task %ld\n",ssd_task_num++);
-        printf("start %d\n",idx);
+        //printf("start %d\n",idx);
         size_t op_code = task->opcode & (MIX_READ | MIX_WRITE);
 
         switch (op_code) {
@@ -99,7 +99,7 @@ static void ssd_worker(void* arg) {
                 ret = 0;
                 break;
         }
-        printf("end %d\n",idx);
+        //printf("end %d\n",idx);
         //free(task);
     }
     return;
@@ -149,6 +149,6 @@ int mix_post_task_to_ssd(io_task_t* task, int idx) {
     return 1;
 }
 
-atomic_bool mix_ssd_queue_is_empty() {
+atomic_bool mix_ssd_queue_is_empty(int idx) {
     return queue_empty;
 }

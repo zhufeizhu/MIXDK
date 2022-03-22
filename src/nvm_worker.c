@@ -90,12 +90,12 @@ io_task_t* get_task_from_nvm_queue(int idx) {
 static atomic_int dequeue_task_num = 0;
 
 io_task_t* get_task_from_buffer_queue(int idx) {
-    if (pthread_mutex_trylock(&mutex[idx])) {
-        return NULL;
-    }
+    //if (pthread_mutex_trylock(&mutex[idx])) {
+        //return NULL;
+    //}
     int len = mix_dequeue(buffer_queue[idx], &buffer_task[idx], 1);
     if (len == 0) {
-        pthread_mutex_unlock(&mutex[idx]);
+        //pthread_mutex_unlock(&mutex[idx]);
         return NULL;
     } else {
         return &buffer_task[idx];
@@ -159,7 +159,7 @@ static int redirect_write(io_task_t* task, int idx) {
             //如果不在buffer中
             offset = mix_get_next_free_block(meta_data, idx);
             if (offset == -1) {
-                printf("[migrate begin %d]\n", idx);
+                //printf("[migrate begin %d]\n", idx);
                 mix_migrate_segment(idx);
                 printf("[migrate end %d]\n", idx);
                 offset = mix_get_next_free_block(meta_data, idx);
@@ -185,8 +185,6 @@ void mix_migrate_segment(int idx) {
     int segment_idx = idx;
     mix_segment_migration_begin(meta_data, segment_idx);
     //等待ssd_queue中的所有任务执行完毕
-    while (!mix_ssd_queue_is_empty())
-        ;
     mix_migrate(meta_data, segment_idx);
     mix_segment_migration_end(meta_data, segment_idx);
 }
@@ -253,18 +251,18 @@ static void nvm_worker(void* arg) {
                 case MIX_READ: {
                     ret = redirect_read(task, idx);
                     atomic_fetch_add_explicit(task->ret,ret,memory_order_relaxed);
-                    pthread_mutex_unlock(&mutex[idx]);
+                    //pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
                 case MIX_WRITE: {
                     ret = redirect_write(task, idx);
                     mix_nvm_write_block_completed(ret);
-                    pthread_mutex_unlock(&mutex[idx]);
+                    //pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
                 default: {
                     ret = 0;
-                    pthread_mutex_unlock(&mutex[idx]);
+                    //pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
             }
@@ -370,8 +368,6 @@ int mix_post_task_to_buffer(io_task_t* task) {
         post_task.opcode = task->opcode;
         post_task.type = task->type;
         post_task.ret = task->ret;
-        // printf("%d post task offset is %lld, len is %lld\n",idx,post_task.offset,post_task.len);
-        // pthread_mutex_lock(&ssd_mutex[idx]);
         while (!mix_enqueue(buffer_queue[idx], &post_task, 1));
         
         // pthread_mutex_unlock(&ssd_mutex[idx]);
