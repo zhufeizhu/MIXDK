@@ -50,8 +50,8 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
    --- | --- | --- | --- | ---
   bw |  0.95G | 1.27G | 2.38G | 
   
-  buffer区测结果
-  总大小 | 4M | 8M | 12M | 16M(未触发migrate) | 16M(触发migrate)
+buffer区测结果
+写总大小 | 4M | 8M | 12M | 16M(未触发migrate) | 16M(触发migrate)
   --- | --- | --- | ---| --- | --- 
 时间 | 7ms | 14ms | 19ms | 25ms | 83ms
 带宽 | 570Mb/s | 570Mb/s | 630Mb/s | 640Mb/s | 192Mb/s
@@ -98,4 +98,68 @@ https://blog.csdn.net/chongdajerry/article/details/79976660
 ```shell
   filebench -f xxxx.f
 ```
-执行对应的workloads  如果出现
+执行对应的workloads 例如createfiles.f
+```
+set $dir=/root/test
+set $nfiles=50000
+set $meandirwidth=100
+set $meanfilesize=16k
+set $iosize=1m
+set $nthreads=16
+
+set mode quit firstdone
+
+define fileset name=bigfileset,path=$dir,size=$meanfilesize,entries=$nfiles,dirwidth=$meandirwidth
+
+define process name=filecreate,instances=1
+{
+  thread name=filecreatethread,memsize=10m,instances=$nthreads
+  {
+    flowop createfile name=createfile1,filesetname=bigfileset,fd=1
+    flowop writewholefile name=writefile1,dsync,fd=1,iosize=$iosize
+    flowop closefile name=closefile1,fd=1
+  }
+}
+
+echo  "Createfiles Version 3.0 personality successfully loaded"
+
+run 60
+```
+需要在write时加上dsync保证每次写的数据落盘
+
+
+## 创建文件系统
+ext4文件系统默认是分组的 虽然有flex_bg模式 默认让每16个组作为一个组群 但是实际上每个组群需要的元数据大小大致为(1+1+512) 加起来就是
+16 * 514 * 4096 = 32.125M  可以使用packed_meta_blocks模式将所有的元数据压缩到整个硬盘的开始 在465.8 GiB的nvme0n1上 所有的元数据
+加起来的大小为superblock + reserved superblock + gdt + reserved gdt + block bitmap + inode bitmap + inode table = (1928252 + 512) * 4k ≈ 7.35G
+
+同时对于ext4来说存在lazy_init的问题 因此需要在挂载的时候添加选项 -E lazy_itable_init=0,lazy_journal_init=0来关闭懒加载
+```shell
+mke2fs -t ext4 -E lazy_itable_init=0,lazy_journal_init=0 packed_meta_blocks=1 /dev/nvme0n1
+```
+
+查看创建文件系统的布局
+```shell
+debugfs -R stats /dev/nvme0n1
+```
+结果如[ext4布局](layout.txt)所示 可以看到
+1. 一共有3727各组 每个组占的blk bitmap占1block,inode bitmap占1block,inode table占512 bloc
+2. 使用packed元数据模式下第一个group的block bitmap在第1084块上 inode bitmap在第4811块上 inode table的第一块在第8538块上 最后一个group 3726的block bitmap在第4810块上
+inode bitmap在第8537块上 inode table的第一块在第1928252块上
+3. 根据计算 (4810 - 1084 + 1) = 3727  (8537 - 4811 + 1) = 3727 (1928252 - 8538 + 512) = 512 * 3727都是符合的
+
+block bitmap  inode bitmap    inode table
+  1084-4810     4811-8537    8538-1928764
+
+## 处理trace
+通过blkparse的format和filter来预处理trace
+```shell
+blkparse nvme0n1 -f "%a,%d,%S,%n\n" -a queue -o output.txt 
+```
+这样过滤掉所有的非队列操作 显示的信息包括
+```
+a   Action, a (small) string (1 or 2 characters) -- see table below for more details
+d   RWBS field, a (small) string (1-3 characters)  -- see section below for more details
+S   Sector number
+n   Number of blocks
+```
