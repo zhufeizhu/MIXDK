@@ -27,6 +27,49 @@ static bool mix_free_segment_init(free_segment_t* segment, uint32_t size) {
     return true;
 };
 
+char migrate_buf[8][4096];
+
+void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst,int idx) {
+    mix_buffer_read(migrate_buf[idx],src,0);
+    mix_ssd_write(migrate_buf[idx],1,dst,0,0);
+    mix_buffer_clear(src);
+}
+
+atomic_int_fast8_t completed_migrate_thread_num[SEGMENT_NUM];
+
+void* migrate(void* arg){
+    migrate_thread_t* thread = (migrate_thread_t*)arg;
+    mix_metadata_t* meta_data = thread->meta_data;
+    int thread_idx = thread->thread_idx;
+    printf("init thread id %d\n",thread_idx);
+    int segment_idx = 0;
+    pthread_mutex_t migrate_mutex;
+    pthread_mutex_init(&migrate_mutex,NULL);
+    uint8_t mask = 1 << thread_idx;
+
+    while(1){
+        //pthread_mutex_lock(&migrate_mutex);
+        while(!meta_data->migration[thread_idx]); //pthread_cond_wait(meta_data->migrate_cond,&migrate_mutex);
+        segment_idx = *(thread->segment_idx);
+        //printf("begin migrate %d and thread is %d and pid is %ld\n",segment_idx,thread_idx,pthread_self());
+        int migrate_idx = thread_idx;
+        while(migrate_idx < meta_data->hash[segment_idx]->hash_size){
+            mix_kv_t kv;
+            while(1){
+                kv = mix_hash_get_entry_by_idx(meta_data->hash[segment_idx],migrate_idx);
+                if(kv.key == (uint32_t)-1 || kv.value == (uint32_t)-1) break;
+                migrate_from_buffer_to_ssd(kv.value, kv.key,thread_idx);
+                meta_data->segments[segment_idx].used_block_num--;
+            }
+            migrate_idx = migrate_idx + meta_data->migrate_thread_num;
+        }
+        //printf("end migrate %d and thread is %d and pid is %ld\n",segment_idx,thread_idx,pthread_self());
+        //pthread_mutex_unlock(&migrate_mutex);
+        completed_migrate_thread_num[segment_idx]++;
+        meta_data->migration[thread_idx] = false;
+    }
+}
+
 /**
  * @brief 申请并初始化metadata 包括全局的hash 全局的bloom_filter
  *全局的free_segment等
@@ -43,19 +86,35 @@ mix_metadata_t* mix_metadata_init(uint32_t block_num) {
     meta_data->block_num = block_num;
     meta_data->size = block_num * BLOCK_SIZE;
     meta_data->per_block_num = block_num / SEGMENT_NUM;
-
+    meta_data->migrate_thread_num = 8;
     size_t per_segment_size = BLOCK_SIZE * meta_data->per_block_num;
-
+    meta_data->migrate_mutex = malloc(sizeof(pthread_mutex_t));
+    meta_data->migrate_cond = malloc(sizeof(pthread_cond_t));
+    meta_data->migrate_segment_idx = malloc(sizeof(int));
+    pthread_mutex_init(meta_data->migrate_mutex,NULL);
+    pthread_cond_init(meta_data->migrate_cond, NULL);
     for (int i = 0; i < SEGMENT_NUM; i++) {
         meta_data->hash[i] = mix_hash_init(100);
         meta_data->bloom_filter[i] =
             mix_counting_bloom_filter_init(meta_data->per_block_num, 0.01);
         if (!mix_free_segment_init(&(meta_data->segments[i]),
                                    per_segment_size)) {
-            mix_log("mix_init_metadata", "init free segment faield");
+            mix_log("mix_init_metadata", "init free segment failed");
             return NULL;
         }
     }
+    migrate_thread_t* threads = malloc(sizeof(migrate_thread_t)*meta_data->migrate_thread_num);
+    pthread_t pids[meta_data->migrate_thread_num];
+    for(int i = 0; i < meta_data->migrate_thread_num; i++){
+        threads[i].meta_data = meta_data;
+        threads[i].segment_idx = meta_data->migrate_segment_idx;
+        threads[i].thread_idx = i;
+        if(pthread_create(pids + i, NULL,migrate,(void*)(threads + i))){
+            mix_log("mix_init_metadata","init migrate threads failed");
+            return NULL;
+        }
+    }
+    
 
     return meta_data;
 }
@@ -92,10 +151,6 @@ void mix_metadata_free(mix_metadata_t* meta_data) {
  * @return 不存在空闲块时返回-1 存在时返回其在当前segment中的偏移
  **/
 int mix_get_next_free_block(mix_metadata_t* meta_data, int idx) {
-    if (meta_data->segments[idx].migration) {
-        return -1;
-    }
-
     if(meta_data->segments[idx].used_block_num == meta_data->per_block_num) return -1;
 
     //从free_segment中申请空闲块
@@ -128,10 +183,6 @@ bool mix_write_redirect_blockmeta(mix_metadata_t* meta_data,
     // mix_counting_bloom_filter_add(meta_data->bloom_filter[idx], offset);
 
     meta_data->segments[idx].used_block_num++;
-    if (meta_data->segments[idx].used_block_num ==
-        meta_data->segments[idx].block_num) {
-        meta_data->migration = true;
-    }
     return false;
 }
 
@@ -210,12 +261,6 @@ inline bool mix_in_migration(mix_metadata_t* meta_data, int idx) {
     return meta_data->segments[idx].migration = true;
 }
 
-void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
-    char buf[4096];
-    mix_buffer_read(buf,src,0);
-    mix_buffer_clear(src);
-    mix_ssd_write(buf,1,dst,0,0);
-}
 
 /**
  * @brief 将指定idx中buffer的数据迁入到ssd中
@@ -223,17 +268,15 @@ void migrate_from_buffer_to_ssd(uint32_t src, uint32_t dst) {
  * @param idx
  */
 void mix_migrate(mix_metadata_t* meta_data, int idx) {
-    meta_data->hash[idx]->hash_list_node_entry = NULL;
     meta_data->hash[idx]->hash_node_entry_idx = 0;
-    for (int i = 0; i < meta_data->per_block_num; i++) {
-        mix_kv_t kv = mix_hash_get_entry(meta_data->hash[idx]);
-        if (kv.key == (uint32_t)-1 && kv.value == (uint32_t)-1)
-            continue;
-        migrate_from_buffer_to_ssd(kv.value, kv.key);
-        //mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
-        meta_data->segments[idx].used_block_num--;
-    }
-    mix_bitmap_clear(meta_data->segments[idx].bitmap);
+    // for (int i = 0; i < meta_data->per_block_num; i++) {
+    //     mix_kv_t kv = mix_hash_get_entry(meta_data->hash[idx]);
+    //     if (kv.key == (uint32_t)-1 && kv.value == (uint32_t)-1)
+    //         continue;
+    //     migrate_from_buffer_to_ssd(kv.value, kv.key);
+    //     //mix_counting_bloom_filter_remove(meta_data->bloom_filter[idx] ,kv.key);
+    //     meta_data->segments[idx].used_block_num--;
+    // }
 }
 
 bool mix_buffer_rebuild(mix_metadata_t* meta_data,int idx){
@@ -277,11 +320,17 @@ inline bool mix_buffer_migrating(mix_metadata_t* meta_data) {
 }
 
 inline void mix_segment_migration_begin(mix_metadata_t* meta_data, int idx) {
-    meta_data->segments[idx].migration = true;
+    *(meta_data->migrate_segment_idx) = idx;
+    atomic_exchange(completed_migrate_thread_num + idx,0);
+    for(int i = 0; i < meta_data->migrate_thread_num; i++)
+        meta_data->migration[i] = true;
+    //pthread_cond_broadcast(meta_data->migrate_cond);
 }
 
 inline void mix_segment_migration_end(mix_metadata_t* meta_data, int idx) {
-    meta_data->segments[idx].migration = false;
+    while(completed_migrate_thread_num[idx] < meta_data->migrate_thread_num);
+    atomic_exchange(completed_migrate_thread_num + idx,0);
+    mix_bitmap_clear(meta_data->segments[idx].bitmap);
 }
 
 inline bool mix_has_free_block(mix_metadata_t* meta_data, int idx) {

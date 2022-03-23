@@ -120,7 +120,6 @@ mix_hash_t* mix_hash_init(int size) {
     }
 
     hash->hash_node_entry_idx = -1;
-    hash->hash_list_node_entry = NULL;
     return hash;
 }
 
@@ -293,6 +292,23 @@ mix_kv_t mix_hash_get_entry(mix_hash_t* hash) {
             }
             hash->hash_node_entry_idx = (hash->hash_node_entry_idx + 1)%hash->hash_size;
         }
+    }
+    return kv;
+}
+
+
+mix_kv_t mix_hash_get_entry_by_idx(mix_hash_t* hash,int idx) {
+    mix_kv_t kv;
+    kv.key = -1;
+    kv.value = -1;
+    hash_node_t* hash_node = &(hash->hash_nodes[idx]);
+    if (hash_node->len > 0){
+        kv.key = hash_node->list->key;
+        kv.value = hash_node->list->value;
+        hash_list_node_t* list_node = hash_node->list->next;
+        free(hash_node->list);
+        hash_node->list = list_node;
+        hash_node->len--;
     }
     return kv;
 }

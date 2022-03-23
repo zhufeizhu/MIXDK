@@ -1,6 +1,4 @@
 ## 测试代码
-
-
 使用blktrace抓取block io并使用blkparse作图
 ```shell
 blktrace -d /dev/nvme0n1
@@ -51,10 +49,19 @@ iowatcher -t nvme0n1.blktrace.bin -o disk.svg
   bw |  0.95G | 1.27G | 2.38G | 
   
 buffer区测结果
-写总大小 | 4M | 8M | 12M | 16M(未触发migrate) | 16M(触发migrate)
-  --- | --- | --- | ---| --- | --- 
-时间 | 7ms | 14ms | 19ms | 25ms | 83ms
-带宽 | 570Mb/s | 570Mb/s | 630Mb/s | 640Mb/s | 192Mb/s
+写总大小 | 4M | 8M | 12M | 16M(未触发migrate) | 16M(触发1migrate) | 16M(触发2migrate) | 16M(触发3migrate) | 16M(触发4migrate)
+  --- | --- | --- | --- | --- | --- | --- | --- | --- 
+(cold)时间 | 7.8ms | 14ms | 19ms | 25ms | 26ms | 27 | 28 | 29 
+(cold)带宽 | 570Mb/s | 570Mb/s | 630Mb/s | 640Mb/s | 192Mb/s | 1 | 1 | 1 | 
+(hot)时间 | 1.9ms | 3.5 ms | 5.5ms | 7ms | 15ms | 16.5ms | 17.5ms | 19ms
+
+
+
+在之前的设计中 migrate动作要等到对应的ssd worker中的请求执行完成才能进行 这样做其实等价于将所有的请求抛到对应的任务队列中
+但是这样相当于在执行migrate的过程中 只使用到了一个线程的能力 
+1. 增加扩展性 考虑到对于一个segment来说 其中的数据是没有先后顺序的 因此可以直接将任务分配到多个条带的任务队列中 增加了数据迁移时的性能
+2. recovery 之前的写是先迁移数据 再清空对应的自描述数据 保证即使在迁移的过程中掉电 也能够恢复 这个过程是同步等待的 现在改成多线程之后 也就是说
+迁移的segment需要等待所有的数据迁移完成
 
 # 测试
 1. 安装pmdk的一些依赖 执行如下命令
@@ -148,8 +155,9 @@ debugfs -R stats /dev/nvme0n1
 inode bitmap在第8537块上 inode table的第一块在第1928252块上
 3. 根据计算 (4810 - 1084 + 1) = 3727  (8537 - 4811 + 1) = 3727 (1928252 - 8538 + 512) = 512 * 3727都是符合的
 
-block bitmap  inode bitmap    inode table
-  1084-4810     4811-8537    8538-1928764
+类型 | block bitmap | inode bitmap | inode table
+--- | --- | --- | ---
+范围(块) |  1084-4810 | 4811-8537 | 8538-1928764
 
 ## 处理trace
 通过blkparse的format和filter来预处理trace

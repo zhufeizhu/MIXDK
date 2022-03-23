@@ -13,6 +13,6 @@ int mix_post_task_to_ssd(io_task_t*, int);
 
 atomic_int mix_get_completed_ssd_write_block_num();
 
-atomic_bool mix_ssd_queue_is_empty();
+atomic_bool mix_ssd_queue_is_empty(int idx);
 
 #endif  // MIX_SSD_QUEUE_H

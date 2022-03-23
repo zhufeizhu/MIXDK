@@ -12,7 +12,7 @@
 #define SSD_WORKER_NUM 4
 
 static mix_queue_t** ssd_queue;
-static atomic_bool queue_empty;
+static atomic_bool queue_empty[SSD_QUEUE_NUM];
 //设置队列任务的大小 测试发现当block的大小超过12k时 性能将不再随着block的
 //大小而增加 后面需要再详细测试一下
 static const int stripe_size = 4;
@@ -52,10 +52,10 @@ static inline void mix_ssd_write_block_completed(int nblock) {
 io_task_t* get_task_from_ssd_queue(int idx) {
     int len = mix_dequeue(ssd_queue[idx], &ssd_task[idx], 1);
     if (len) {
-        queue_empty = false;
+        queue_empty[idx] = false;
         return &ssd_task[idx];
     } else {
-        queue_empty = true;
+        queue_empty[idx] = true;
         return NULL;
     }
 }
@@ -150,5 +150,5 @@ int mix_post_task_to_ssd(io_task_t* task, int idx) {
 }
 
 atomic_bool mix_ssd_queue_is_empty(int idx) {
-    return queue_empty;
+    return queue_empty[idx];
 }

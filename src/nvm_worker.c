@@ -159,10 +159,16 @@ static int redirect_write(io_task_t* task, int idx) {
             //如果不在buffer中
             offset = mix_get_next_free_block(meta_data, idx);
             if (offset == -1) {
+                printf("id is %lld\n",task->offset);
+                struct timespec start,end;
+                clock_gettime(CLOCK_MONOTONIC_RAW, &start);
                 //printf("[migrate begin %d]\n", idx);
                 mix_migrate_segment(idx);
-                printf("[migrate end %d]\n", idx);
+                //printf("[migrate end %d]\n", idx);
                 offset = mix_get_next_free_block(meta_data, idx);
+                clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+                printf("migrate %d segment time3 is %lu us\n", idx,(end.tv_sec - start.tv_sec) * 1000000 +
+                    (end.tv_nsec - start.tv_nsec) / 1000);
             }
             mix_write_redirect_blockmeta(meta_data, idx, task->offset, offset);
         }
@@ -174,7 +180,7 @@ static int redirect_write(io_task_t* task, int idx) {
         return 0;
     }
 }
-
+static struct timespec start1, start2, end;
 /**
  * @brief 将满了的segment中的数据迁移到对应的ssd中
  * 在正式开始迁移前需要保证buffer_queue中的task都执行完成
@@ -183,15 +189,25 @@ static int redirect_write(io_task_t* task, int idx) {
  */
 void mix_migrate_segment(int idx) {
     int segment_idx = idx;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start1);
+    while(!mix_ssd_queue_is_empty(idx));
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start2);
+    pthread_mutex_lock(meta_data->migrate_mutex);
     mix_segment_migration_begin(meta_data, segment_idx);
     //等待ssd_queue中的所有任务执行完毕
-    mix_migrate(meta_data, segment_idx);
+    //mix_migrate(meta_data, segment_idx);
     mix_segment_migration_end(meta_data, segment_idx);
+    pthread_mutex_unlock(meta_data->migrate_mutex);
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    printf("migrate %d segment time1 is %lu us\n", idx,(end.tv_sec - start1.tv_sec) * 1000000 +
+                                   (end.tv_nsec - start1.tv_nsec) / 1000);
+    printf("migrate %d segment time2 is %lu us\n", idx,(end.tv_sec - start2.tv_sec) * 1000000 +
+    (end.tv_nsec - start2.tv_nsec) / 1000);
 }
 static atomic_int nvm_task_num = 0;
 // atomic_int task_num = 0;
 
-static struct timespec start, end;
+
 
 char* buf = NULL;
 
@@ -237,7 +253,6 @@ static void nvm_worker(void* arg) {
                 case MIX_WRITE: {
                     ret = mix_write_to_nvm(task->buf, task->len, task->offset,
                                            task->opcode);
-                    //printf("task num is %d\n",nvm_task_num++);
                     mix_nvm_write_block_completed(ret);
                     break;
                 }
@@ -251,18 +266,15 @@ static void nvm_worker(void* arg) {
                 case MIX_READ: {
                     ret = redirect_read(task, idx);
                     atomic_fetch_add_explicit(task->ret,ret,memory_order_relaxed);
-                    //pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
                 case MIX_WRITE: {
                     ret = redirect_write(task, idx);
                     mix_nvm_write_block_completed(ret);
-                    //pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
                 default: {
                     ret = 0;
-                    //pthread_mutex_unlock(&mutex[idx]);
                     break;
                 }
             }

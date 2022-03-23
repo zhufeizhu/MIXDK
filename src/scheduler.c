@@ -48,38 +48,20 @@ int mix_post_task_to_io(io_task_t* task) {
  * @param task 用户传入的io操作
  * @return io_task_t** 对用户传入的io操作的拆分 针对跨nvm和ssd的数据
  */
-static inline io_task_t* handle_task(io_task_t* task) {
+static inline void handle_task(io_task_t* task) {
     //当前task的offset都在nvm的范围内
     if ((size_t)(task->offset + task->len) < threshold) {
         // printf("nvm task\n");
         // 还未考虑跨区的问题
-        int queue_idx1 = (task->offset / 2 )% 4;
-        int queue_idx2 =
-            ((task->offset + task->len) / 2 )%  4;
-        if (queue_idx1 == queue_idx1) {
-            task->queue_idx = queue_idx1;
-            task->type = NVM_TASK;
-            return NULL;
-        } else {
-            task->queue_idx = queue_idx1;
-            task->type = NVM_TASK;
-            task->len =
-                task->len - (task->offset % sched_ctx->nvm_info->per_block_num);
-
-            p_task->queue_idx = queue_idx2;
-            p_task->type = NVM_TASK;
-            p_task->len =
-                (task->len + task->offset) % sched_ctx->nvm_info->per_block_num;
-            p_task->buf = task->buf + p_task->len * BLOCK_SIZE;
-            return p_task;
-        }
+        task->type = NVM_TASK;
+        return;
     }
 
     //当前task的offset都在ssd的范围内
     if ((size_t)task->offset >= threshold) {
-        task->offset -= sched_ctx->nvm_info->block_num;
+        task->offset -= threshold;
         task->type = SSD_TASK;
-        return NULL;
+        return;
     }
 
     // //当前task跨过了nvm和ssd两个区域 基本上不会存在
@@ -141,13 +123,9 @@ static void scheduler(void* arg) {
             continue;
         }
         //printf("not empty\n");
-        io_task_t* new_task = handle_task(io_task);
+        handle_task(io_task);
 
         do_schedule(io_task);
-
-        if (new_task) {
-            do_schedule(new_task);
-        }
     }
     return;
 }

@@ -29,4 +29,6 @@ void mixdk_flush();
 
 size_t mix_completed_task_num();
 
+void mix_segments_clear();
+
 #endif  // MIX_MIXDK_H

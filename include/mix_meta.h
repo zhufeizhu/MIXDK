@@ -29,12 +29,22 @@ typedef struct mix_metadata {
     uint32_t block_num;             //元数据区block的个数
     uint32_t per_block_num;         //元数据区每个segment的block的个数
     mix_hash_t* hash[SEGMENT_NUM];  //全局的hash
-    atomic_bool migration;          //是否在执行迁移动作
+    pthread_cond_t* migrate_cond;
+    atomic_bool migration[SEGMENT_NUM];
     mix_counting_bloom_filter_t*
         bloom_filter[SEGMENT_NUM];         //全局的bloom_filter
     free_segment_t segments[SEGMENT_NUM];  //四个free_segment
     mix_log_t* logs[SEGMENT_NUM];
+    uint8_t migrate_thread_num;
+    int* migrate_segment_idx;
+    pthread_mutex_t* migrate_mutex;
 } mix_metadata_t;
+
+typedef struct migrate_thread{
+    int thread_idx;
+    int* segment_idx;
+    mix_metadata_t* meta_data;
+}migrate_thread_t;
 
 mix_metadata_t* mix_metadata_init(uint32_t block_num);
 

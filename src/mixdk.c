@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "nvm_worker.h"
 #include "mix_task.h"
 #include "scheduler.h"
 
@@ -75,4 +76,8 @@ size_t mixdk_read(void* dst, size_t len, size_t offset, size_t flags, int idx) {
 
 size_t mix_completed_task_num() {
     return get_completed_task_num();
+}
+
+void mix_segments_clear(){
+    mix_rebuild();
 }

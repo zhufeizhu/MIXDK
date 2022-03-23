@@ -27,8 +27,6 @@ typedef struct mix_hash {
     int hash_size;
     hash_node_t* hash_nodes;
     int hash_node_entry_idx;  //进行遍历时正在访问的hahs_node的序号
-    hash_list_node_t*
-        hash_list_node_entry;  //进行遍历时正在访问的hash_list_node的地址
 } mix_hash_t;
 
 #ifdef __cplusplus
@@ -48,6 +46,8 @@ void mix_hash_delete(mix_hash_t* hash, uint32_t key);
 void mix_hash_free(mix_hash_t* hash);
 
 mix_kv_t mix_hash_get_entry(mix_hash_t* hash);
+
+mix_kv_t mix_hash_get_entry_by_idx(mix_hash_t* hash,int idx);
 #ifdef __cplusplus
 }
 #endif
